@@ -1,0 +1,4 @@
+# Secrets / sessions Open Banking
+scripts/sessions*.json
+*.pem
+.env

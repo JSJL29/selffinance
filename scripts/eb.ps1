@@ -33,6 +33,24 @@ if (-not $AppId -or -not $KeyPath) { throw 'Définis EB_APP_ID et EB_KEY_PATH.' 
 
 function B64Url([byte[]]$b) { [Convert]::ToBase64String($b).TrimEnd('=').Replace('+', '-').Replace('/', '_') }
 
+# PS 5.1 : un pipeline ConvertFrom-Json renvoie le tableau comme UN objet, et
+# ConvertTo-Json d'un tableau imbriqué produit {value, Count}. On aplatit donc à la main.
+function Get-Sessions {
+  if (-not (Test-Path $Store)) { return ,@() }
+  $out = New-Object System.Collections.ArrayList
+  function Add-Flat($o) {
+    if ($null -eq $o) { return }
+    if ($o -is [array]) { foreach ($i in $o) { Add-Flat $i } }
+    elseif ($o.PSObject.Properties['value'] -and -not $o.PSObject.Properties['session_id']) { Add-Flat $o.value }
+    else { [void]$out.Add($o) }
+  }
+  Add-Flat (ConvertFrom-Json (Get-Content $Store -Raw))
+  return ,$out.ToArray()
+}
+function Save-Sessions($list) {
+  ConvertTo-Json -InputObject ([object[]]$list) -Depth 5 | Set-Content $Store -Encoding UTF8
+}
+
 function New-Jwt {
   $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
   $h = @{ typ = 'JWT'; alg = 'RS256'; kid = $AppId } | ConvertTo-Json -Compress
@@ -117,16 +135,16 @@ switch ($Cmd) {
     if (-not $Code) { throw '-Code requis' }
     if ($Code -match '[?&]code=([^&]+)') { $Code = [uri]::UnescapeDataString($Matches[1]) }
     $s = Call POST '/sessions' @{ code = $Code }
-    $list = @(); if (Test-Path $Store) { $list = @(Get-Content $Store -Raw | ConvertFrom-Json) }
+    $list = @(Get-Sessions | Where-Object { $_.bank -ne $s.aspsp.name })   # remplace l'ancienne session de la même banque
     $list += [pscustomobject]@{ session_id = $s.session_id; bank = $s.aspsp.name; country = $s.aspsp.country; valid_until = $s.access.valid_until; accounts = @($s.accounts | ForEach-Object { $_.uid }) }
-    ConvertTo-Json @($list) -Depth 5 | Set-Content $Store -Encoding UTF8
+    Save-Sessions $list
     "Session OK : {0} - {1} compte(s), valide jusqu'au {2}" -f $s.aspsp.name, @($s.accounts).Count, $s.access.valid_until
   }
 
   'tx' {
     if (-not (Test-Path $Store)) { throw 'Aucune session. Lance auth puis session.' }
     $from = (Get-Date).AddDays(-$Days).ToString('yyyy-MM-dd')
-    foreach ($s in @(Get-Content $Store -Raw | ConvertFrom-Json)) {
+    foreach ($s in (Get-Sessions)) {
       foreach ($uid in $s.accounts) {
         $det = try { Call GET "/accounts/$uid/details" } catch { $null }
         $label = if ($det) { "$($det.name) $($det.account_id.iban)" } else { $uid }
@@ -136,10 +154,12 @@ switch ($Cmd) {
             ForEach-Object { "Solde : {0} {1} ({2})" -f $_.balance_amount.amount, $_.balance_amount.currency, $_.balance_type }
         } catch { "Solde indisponible : $_" }
         $txs = @(); $ck = $null
-        do {
-          $q = "/accounts/$uid/transactions?date_from=$from" + $(if ($ck) { "&continuation_key=$([uri]::EscapeDataString($ck))" })
-          $r = Call GET $q; $txs += $r.transactions; $ck = $r.continuation_key
-        } while ($ck)
+        try {
+          do {
+            $q = "/accounts/$uid/transactions?date_from=$from" + $(if ($ck) { "&continuation_key=$([uri]::EscapeDataString($ck))" })
+            $r = Call GET $q; $txs += $r.transactions; $ck = $r.continuation_key
+          } while ($ck)
+        } catch { "Transactions indisponibles : $_"; continue }
         "{0} transaction(s) depuis le {1}" -f $txs.Count, $from
         $txs | Select-Object -First 15 | ForEach-Object {
           $sign = if ($_.credit_debit_indicator -eq 'DBIT') { '-' } else { '+' }

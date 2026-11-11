@@ -3,7 +3,9 @@ import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleShe
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AccountGroup, fetchAccounts, fetchSyncBudget, groupAccounts, syncNow, useLoad } from '@/lib/data';
+import {
+  AccountGroup, CONSENT_WARN_DAYS, consentDaysLeft, fetchAccounts, fetchSyncBudget, groupAccounts, syncNow, useLoad,
+} from '@/lib/data';
 import { ago, money } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -40,7 +42,15 @@ export default function Accounts() {
         }
         renderItem={({ item }) => <AccountRow g={item} />}
         ListFooterComponent={
-          <Text onPress={() => supabase.auth.signOut()} style={[s.signOut, { color: t.muted }]}>Se déconnecter</Text>
+          <>
+            <Pressable
+              onPress={() => router.push('/add-bank')}
+              style={({ pressed }) => [s.addBank, { borderColor: t.border, backgroundColor: pressed ? t.border : 'transparent' }]}>
+              <Ionicons name="add" size={18} color={t.primary} />
+              <Text style={{ color: t.primary, fontSize: 15, fontWeight: '600' }}>Ajouter une banque</Text>
+            </Pressable>
+            <Text onPress={() => supabase.auth.signOut()} style={[s.signOut, { color: t.muted }]}>Se déconnecter</Text>
+          </>
         }
       />
     </SafeAreaView>
@@ -106,6 +116,7 @@ function AccountRow({ g }: { g: AccountGroup }) {
   const others = g.members.filter((m) => m.currency && m.currency !== 'EUR' && (m.current_balance ?? 0) !== 0);
   const sub = [g.name, ...others.map((m) => money(m.current_balance ?? 0, m.currency ?? 'EUR'))].join(' · ');
   const manual = g.members.some((m) => m.balance_source === 'manual');
+  const consentLeft = consentDaysLeft(g.consentUntil);
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/account/[id]', params: { id: g.key } })}
@@ -114,11 +125,15 @@ function AccountRow({ g }: { g: AccountGroup }) {
       <View style={s.grow}>
         <Text style={[s.name, { color: t.text }]} numberOfLines={1}>{g.bank}</Text>
         <Text style={[s.small, { color: t.muted }]} numberOfLines={1}>{sub}</Text>
-        {g.error && (
+        {consentLeft != null && consentLeft <= CONSENT_WARN_DAYS ? (
+          <Text style={[s.small, { color: t.danger }]} numberOfLines={1}>
+            <Ionicons name="link-outline" /> {consentLeft < 0 ? 'Accès expiré · à reconnecter' : `Accès expire dans ${consentLeft} j · à reconnecter`}
+          </Text>
+        ) : g.error ? (
           <Text style={[s.small, { color: t.danger }]} numberOfLines={1}>
             <Ionicons name="warning-outline" /> Synchro en erreur
           </Text>
-        )}
+        ) : null}
       </View>
       <View style={s.right}>
         {g.balanceEur == null ? (
@@ -145,6 +160,7 @@ const s = StyleSheet.create({
   right: { alignItems: 'flex-end' },
   amount: { fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   signOut: { textAlign: 'center', padding: 24, fontSize: 13 },
+  addBank: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginHorizontal: 12, marginTop: 4, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed' },
   syncWrap: { marginTop: 14, alignItems: 'flex-start', gap: 6, alignSelf: 'stretch' },
   syncLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   syncButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 },

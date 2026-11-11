@@ -25,6 +25,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="account/[id]" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="add-bank" />
+          <Stack.Screen name="bank-connected" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

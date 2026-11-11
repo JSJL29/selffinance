@@ -207,17 +207,22 @@ Deno.serve(async (req) => {
   if (trigger instanceof Response) return trigger;
 
   const body = await req.json().catch(() => ({}));
-  // Reprise d'historique réservée au cron / à l'admin.
-  const forceDays = trigger === "cron" && Number(body?.days) > 0 ? Number(body.days) : null;
+  // Options réservées aux appels serveur (secret) : reprise d'historique, et synchro
+  // initiale d'une banque juste connectée (`only` + trigger « connect », hors budget).
+  const server = trigger === "cron";
+  const forceDays = server && Number(body?.days) > 0 ? Number(body.days) : null;
+  const only: string[] | null = server && Array.isArray(body?.only) ? body.only.map(String) : null;
+  const runTrigger = server && body?.trigger === "connect" ? "connect" : trigger;
 
-  const { data: run } = await db.from("sync_runs").insert({ trigger }).select("id").single();
+  const { data: run } = await db.from("sync_runs").insert({ trigger: runTrigger }).select("id").single();
   const log: Record<string, string> = {};
   let ok = true;
 
   try { await syncFx(); log.fx = "ok"; } catch (e) { log.fx = String(e); }
 
-  const { data: accounts, error } = await db.from("accounts")
-    .select("uid, bank, name, iban, currency, hidden, bank_sessions(valid_until)");
+  let query = db.from("accounts").select("uid, bank, name, iban, currency, hidden, bank_sessions(valid_until)");
+  if (only) query = query.in("uid", only);
+  const { data: accounts, error } = await query;
   if (error) return fail(500, error.message);
 
   let token: string;

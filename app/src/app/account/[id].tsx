@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AccountRow, byDay, fetchAccounts, fetchAccountTx, groupAccounts, setManualBalance, useLoad } from '@/lib/data';
+import {
+  AccountRow, CONSENT_WARN_DAYS, byDay, consentDaysLeft, fetchAccounts, fetchAccountTx, groupAccounts, setManualBalance, useLoad,
+} from '@/lib/data';
+import { useConnectBank } from '@/components/connect';
 import { ago, maskIban, money, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { DayHeader, Empty, ErrorBox, Loading, TxRow } from '@/components/ui';
@@ -48,6 +51,7 @@ export default function AccountDetail() {
                 ))}
                 <BalanceEditor account={group.members[0]} onSaved={accounts.reload} />
                 {group.error && <Text style={[s.small, { color: t.danger, marginTop: 8 }]}>{group.error}</Text>}
+                <ConsentBox bank={group.bank} until={group.consentUntil} onDone={refresh} />
               </>
             )}
             {txs.error && <ErrorBox message={txs.error} onRetry={txs.reload} />}
@@ -59,6 +63,42 @@ export default function AccountDetail() {
         contentContainerStyle={{ paddingBottom: 32 }}
       />
     </SafeAreaView>
+  );
+}
+
+/** Durée de l'accès bancaire et bouton pour le renouveler depuis l'app. */
+function ConsentBox({ bank, until, onDone }: { bank: string; until: string | null; onDone: () => Promise<void> }) {
+  const t = useTheme();
+  const { busy, connect } = useConnectBank(onDone);
+  const left = consentDaysLeft(until);
+  const urgent = left != null && left <= CONSENT_WARN_DAYS;
+
+  function confirm() {
+    Alert.alert(
+      `Reconnecter ${bank} ?`,
+      'Tu vas te connecter sur le site de ta banque puis valider dans son app. Ton historique est conservé.',
+      [{ text: 'Annuler', style: 'cancel' }, { text: 'Continuer', onPress: () => connect(bank) }],
+    );
+  }
+
+  return (
+    <View style={[s.consent, { borderColor: urgent ? t.danger : t.border }]}>
+      <View style={{ flex: 1 }}>
+        <Text style={[s.small, { color: t.text, fontWeight: '600' }]}>Accès bancaire</Text>
+        <Text style={[s.small, { color: urgent ? t.danger : t.muted }]}>
+          {left == null ? 'Date d’expiration inconnue'
+            : left < 0 ? `Expiré le ${shortDate(until!)}`
+            : `Valable jusqu’au ${shortDate(until!)} (${left} j)`}
+        </Text>
+      </View>
+      <Pressable
+        onPress={confirm} disabled={!!busy}
+        style={[s.consentButton, { backgroundColor: urgent ? t.primary : 'transparent', borderColor: t.primary }]}>
+        {busy
+          ? <ActivityIndicator size="small" color={urgent ? t.primaryText : t.primary} />
+          : <Text style={{ color: urgent ? t.primaryText : t.primary, fontWeight: '600', fontSize: 13 }}>Reconnecter</Text>}
+      </Pressable>
+    </View>
   );
 }
 
@@ -125,6 +165,8 @@ function BalanceEditor({ account, onSaved }: { account: AccountRow; onSaved: () 
 
 const s = StyleSheet.create({
   flex: { flex: 1 },
+  consent: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 1 },
+  consentButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, minWidth: 104, alignItems: 'center' },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
   back: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginLeft: -4 },
   title: { fontSize: 22, fontWeight: '700' },

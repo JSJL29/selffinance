@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from './supabase';
 import { isoDay } from './format';
 
@@ -19,6 +21,7 @@ export type AccountRow = {
   current_balance: number | null;
   balance_source: 'bank' | 'manual' | null;
   balance_eur: number | null;
+  consent_until: string | null;
 };
 
 export type Tx = {
@@ -47,7 +50,17 @@ export type AccountGroup = {
   balanceEur: number | null;
   lastSyncAt: string | null;
   error: string | null;
+  /** Fin du consentement bancaire (le plus proche des comptes du groupe). */
+  consentUntil: string | null;
 };
+
+/** Nombre de jours avant lequel on propose de reconnecter la banque. */
+export const CONSENT_WARN_DAYS = 15;
+
+export function consentDaysLeft(until: string | null): number | null {
+  if (!until) return null;
+  return Math.floor((new Date(until).getTime() - Date.now()) / 86_400_000);
+}
 
 export function groupAccounts(rows: AccountRow[]): AccountGroup[] {
   const map = new Map<string, AccountGroup>();
@@ -56,10 +69,11 @@ export function groupAccounts(rows: AccountRow[]): AccountGroup[] {
     const key = r.iban ?? r.uid;
     let g = map.get(key);
     if (!g) {
-      g = { key, bank: r.bank, name: r.name ?? 'Compte courant', iban: r.iban, members: [], balanceEur: null, lastSyncAt: null, error: null };
+      g = { key, bank: r.bank, name: r.name ?? 'Compte courant', iban: r.iban, members: [], balanceEur: null, lastSyncAt: null, error: null, consentUntil: null };
       map.set(key, g);
     }
     g.members.push(r);
+    if (r.consent_until && (!g.consentUntil || r.consent_until < g.consentUntil)) g.consentUntil = r.consent_until;
     if (r.balance_eur != null) g.balanceEur = (g.balanceEur ?? 0) + Number(r.balance_eur);
     if (r.last_sync_at && (!g.lastSyncAt || r.last_sync_at > g.lastSyncAt)) g.lastSyncAt = r.last_sync_at;
     if (r.last_error) g.error = r.last_error;
@@ -158,14 +172,68 @@ export async function saveAutoHours(hours: number[]) {
 /** Lance une synchro des banques maintenant. Renvoie un message d'erreur, ou null si tout est OK. */
 export async function syncNow(): Promise<string | null> {
   const { data, error } = await supabase.functions.invoke('sync', { body: {} });
-  if (error) {
-    // Erreur HTTP de la fonction : son message est dans le corps JSON.
-    const res = (error as { context?: Response }).context;
-    const body = res ? await res.json().catch(() => null) : null;
-    return body?.error ?? error.message;
-  }
+  if (error) return functionError(error);
   if (data && data.ok === false) return 'Certaines banques n\'ont pas pu être synchronisées.';
   return null;
+}
+
+// ---------- Connexion des banques (fonction `bank`) ----------
+
+export type Aspsp = { name: string; country: string; logo: string | null; max_days: number };
+
+/** Lit le message d'erreur JSON renvoyé par une fonction Supabase. */
+async function functionError(error: unknown): Promise<string> {
+  const res = (error as { context?: Response }).context;
+  const body = res ? await res.json().catch(() => null) : null;
+  return body?.error ?? (error as Error).message ?? String(error);
+}
+
+export async function fetchAspsps(country = 'FR'): Promise<Aspsp[]> {
+  const { data, error } = await supabase.functions.invoke(`bank/aspsps?country=${country}`, { method: 'GET' });
+  if (error) throw new Error(await functionError(error));
+  return data.aspsps as Aspsp[];
+}
+
+export type ConnectResult =
+  | { status: 'ok'; accounts: number; newAccounts: number }
+  | { status: 'cancel' }
+  | { status: 'error'; message: string };
+
+/**
+ * Connecte (ou reconnecte) une banque : ouvre la page de la banque dans l'app,
+ * puis revient automatiquement une fois la connexion validée.
+ */
+export async function connectBank(bank: string, country = 'FR'): Promise<ConnectResult> {
+  const returnTo = Linking.createURL('bank-connected');
+  const { data, error } = await supabase.functions.invoke('bank/start', {
+    body: { bank, country, return_to: returnTo },
+  });
+  if (error) return { status: 'error', message: await functionError(error) };
+
+  const res = await WebBrowser.openAuthSessionAsync(data.url as string, returnTo);
+
+  // Le résultat vient de l'adresse de retour si elle a pu rouvrir l'app, sinon on le
+  // relit sur le serveur (navigateur fermé à la main après une erreur de redirection).
+  const q = res.type === 'success'
+    ? (Linking.parse(res.url).queryParams ?? {})
+    : await fetchConnectResult(data.state as string);
+  if (q.status === 'ok') {
+    return { status: 'ok', accounts: Number(q.accounts ?? 0), newAccounts: Number(q.new ?? 0) };
+  }
+  if (q.status === 'error') return { status: 'error', message: String(q.message ?? 'Connexion échouée.') };
+  return { status: 'cancel' };
+}
+
+/** Résultat enregistré par le serveur ; attend quelques secondes s'il est en cours de traitement. */
+async function fetchConnectResult(state: string): Promise<Record<string, unknown>> {
+  for (let i = 0; i < 8; i++) {
+    const { data, error } = await supabase.functions.invoke(`bank/status?state=${state}`, { method: 'GET' });
+    if (error) return {};
+    const r = (data?.result ?? {}) as Record<string, unknown>;
+    if (r.status !== 'processing') return r;
+    await new Promise((ok) => setTimeout(ok, 1000));
+  }
+  return {};
 }
 
 /** Libellé principal d'une transaction. */

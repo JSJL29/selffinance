@@ -18,6 +18,15 @@ const STATEMENT = `<?xml version="1.0" encoding="UTF-8"?>
 <CashReportCurrency accountId="U1234567" currency="EUR" levelOfDetail="Currency" endingCash="1000" />
 <CashReportCurrency accountId="U1234567" currency="USD" levelOfDetail="Currency" endingCash="250.75" />
 </CashReport>
+<Trades>
+<Trade accountId="U1234567" currency="USD" fxRateToBase="0.9" assetCategory="STK" symbol="AAPL" conid="265598" tradeID="110" tradeDate="20261104" quantity="3" tradePrice="290" ibCommission="-1" fifoPnlRealized="0" buySell="BUY" levelOfDetail="EXECUTION" />
+<Trade accountId="U1234567" currency="USD" fxRateToBase="0.9" assetCategory="STK" symbol="AAPL" conid="265598" tradeID="111" tradeDate="20261105" quantity="-2" tradePrice="300" ibCommission="-1" fifoPnlRealized="24.5" buySell="SELL" levelOfDetail="EXECUTION" />
+</Trades>
+<CashTransactions>
+<CashTransaction accountId="U1234567" currency="USD" fxRateToBase="0.9" conid="265598" type="Dividends" amount="3.2" dateTime="20261106" description="AAPL CASH DIVIDEND" transactionID="222" />
+<CashTransaction accountId="U1234567" currency="USD" fxRateToBase="0.9" conid="265598" type="Withholding Tax" amount="-0.48" dateTime="20261106;202000" description="AAPL US TAX" transactionID="223" />
+<CashTransaction accountId="U1234567" currency="EUR" fxRateToBase="1" conid="" type="Deposits/Withdrawals" amount="500" dateTime="20261101" description="DEPOT" transactionID="224" />
+</CashTransactions>
 </FlexStatement>
 </FlexStatements>
 </FlexQueryResponse>`;
@@ -62,4 +71,26 @@ test('parseFlexResponse : relevé en cours de génération (1019)', () => {
   assert.equal(r.status, 'Warn');
   assert.equal(r.errorCode, '1019');
   assert.match(r.errorMessage!, /in progress/);
+});
+
+test('parseStatement lit les ventes (SELL) avec la plus-value IBKR, ignore les achats', () => {
+  assert.deepEqual(parseStatement(STATEMENT).trades, [
+    { id: '111', conid: '265598', date: '2026-11-05', quantity: 2, price: 300, commission: 1,
+      currency: 'USD', fxRateToBase: 0.9, realized: 24.5 },
+  ]);
+});
+
+test('parseStatement lit dividendes et retenues à la source, ignore les autres mouvements', () => {
+  assert.deepEqual(parseStatement(STATEMENT).cashTx, [
+    { id: '222', conid: '265598', type: 'dividend', date: '2026-11-06', amount: 3.2, currency: 'USD',
+      fxRateToBase: 0.9, description: 'AAPL CASH DIVIDEND' },
+    { id: '223', conid: '265598', type: 'withholding', date: '2026-11-06', amount: -0.48, currency: 'USD',
+      fxRateToBase: 0.9, description: 'AAPL US TAX' },
+  ]);
+});
+
+test('parseStatement sans sections Trades / Cash Transactions : listes vides', () => {
+  const s = parseStatement('<FlexQueryResponse><FlexStatements><FlexStatement accountId="U1" toDate="20261110"></FlexStatement></FlexStatements></FlexQueryResponse>');
+  assert.deepEqual(s.trades, []);
+  assert.deepEqual(s.cashTx, []);
 });

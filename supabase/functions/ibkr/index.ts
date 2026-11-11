@@ -121,6 +121,35 @@ async function sync() {
       if (error) throw new Error(error.message);
     }
 
+    // Ventes et dividendes (idempotent : une opération IBKR déjà vue n'est pas recréée).
+    // Les liquidités IBKR viennent du relevé : cash_credit reste à 0.
+    const instrumentFor = (conid: string | null) => (conid ? ids.get(`ibkr:${conid}`) ?? null : null);
+    if (st.trades.length || st.cashTx.length) {
+      // Titres vendus en totalité : absents des positions, on les retrouve par leur conid.
+      const missing = [...new Set([...st.trades.map((t) => t.conid), ...st.cashTx.map((c) => c.conid ?? '')])]
+        .filter((c) => c && !ids.has(`ibkr:${c}`)).map((c) => `ibkr:${c}`);
+      if (missing.length) {
+        const { data: more } = await db.from("instruments").select("id, source_symbol").in("source_symbol", missing);
+        for (const m of more ?? []) ids.set(m.source_symbol, m.id);
+      }
+      const ops = [
+        ...st.trades.map((t) => ({
+          account_id: accountId, instrument_id: instrumentFor(t.conid), kind: "sell", date: t.date,
+          quantity: t.quantity, price: t.price, fees: t.commission, currency: t.currency,
+          realized: t.realized, fx_per_eur: 1 / t.fxRateToBase, source: "ibkr", external_id: `trade:${t.id}`,
+        })),
+        ...st.cashTx.map((c) => ({
+          account_id: accountId, instrument_id: instrumentFor(c.conid), kind: c.type, date: c.date,
+          amount: c.amount, currency: c.currency, fx_per_eur: 1 / c.fxRateToBase, source: "ibkr",
+          external_id: `cash:${c.id}`, note: c.description || null,
+        })),
+      ];
+      const { error } = await db.from("operations")
+        // defaultToNull: false → colonnes absentes d'une ligne = valeurs par défaut (fees 0, cash_credit 0…)
+        .upsert(ops, { onConflict: "source,external_id", ignoreDuplicates: true, defaultToNull: false });
+      if (error) throw new Error(`operations: ${error.message}`);
+    }
+
     // Liquidités converties en EUR
     const { data: fx } = await db.from("fx_rates").select("currency, per_eur");
     const rate = new Map((fx ?? []).map((r: { currency: string; per_eur: number }) => [r.currency, Number(r.per_eur)]));
@@ -133,7 +162,10 @@ async function sync() {
       sync_error: missing.length ? `Liquidités ignorées (taux de change absent) : ${missing.join(", ")}` : null,
     }).eq("id", accountId);
 
-    return { ok: true, date, positions: st.positions.length, cash_eur: Math.round(cashEur * 100) / 100 };
+    return {
+      ok: true, date, positions: st.positions.length, cash_eur: Math.round(cashEur * 100) / 100,
+      sells: st.trades.length, dividends: st.cashTx.length,
+    };
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e).slice(0, 300);
     await db.from("manual_accounts").update({ sync_error: msg }).eq("id", accountId);

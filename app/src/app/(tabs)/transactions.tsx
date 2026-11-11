@@ -1,0 +1,80 @@
+import { useMemo, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { byDay, fetchMonthTx, useLoad } from '@/lib/data';
+import { money, monthLabel } from '@/lib/format';
+import { bankShortName, useTheme } from '@/lib/theme';
+import { Chip, DayHeader, Empty, ErrorBox, Loading, TxRow } from '@/components/ui';
+
+const ALL = 'Tous';
+
+export default function Transactions() {
+  const t = useTheme();
+  const [month, setMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [bank, setBank] = useState(ALL);
+  const { data, error, refreshing, refresh, reload } = useLoad(() => fetchMonthTx(month), [month.getTime()]);
+
+  const banks = useMemo(() => [...new Set((data ?? []).map((x) => x.bank))].sort((a, b) => a.localeCompare(b, 'fr')), [data]);
+  const shown = useMemo(() => (data ?? []).filter((x) => bank === ALL || x.bank === bank), [data, bank]);
+  const sections = useMemo(() => byDay(shown), [shown]);
+
+  const spent = shown.filter((x) => !x.is_internal && x.amount < 0).reduce((sum, x) => sum + x.amount_eur, 0);
+  const received = shown.filter((x) => !x.is_internal && x.amount > 0).reduce((sum, x) => sum + x.amount_eur, 0);
+
+  const now = new Date();
+  const isCurrent = month.getFullYear() === now.getFullYear() && month.getMonth() === now.getMonth();
+  const shift = (n: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + n, 1));
+
+  return (
+    <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
+      <SectionList
+        sections={sections}
+        keyExtractor={(x) => String(x.id)}
+        stickySectionHeadersEnabled
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}
+        ListHeaderComponent={
+          <View>
+            <View style={s.header}>
+              <Text style={[s.title, { color: t.text }]}>Toutes les transactions</Text>
+              <View style={s.monthRow}>
+                <Pressable onPress={() => shift(-1)} hitSlop={12}><Ionicons name="chevron-back" size={20} color={t.primary} /></Pressable>
+                <Text style={[s.month, { color: t.text }]}>{monthLabel(month)}</Text>
+                <Pressable onPress={() => shift(1)} disabled={isCurrent} hitSlop={12}>
+                  <Ionicons name="chevron-forward" size={20} color={isCurrent ? t.border : t.primary} />
+                </Pressable>
+              </View>
+              <Text style={[s.small, { color: t.muted }]}>Dépenses hors virements internes</Text>
+              <Text style={[s.big, { color: t.text }]}>{money(spent)}</Text>
+              {received > 0 && <Text style={[s.small, { color: t.success }]}>Rentrées : {money(received, 'EUR', { sign: true })}</Text>}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+              {[ALL, ...banks].map((b) => (
+                <Chip key={b} label={b === ALL ? b : bankShortName(b)} on={bank === b} onPress={() => setBank(b)} />
+              ))}
+            </ScrollView>
+            {error && <ErrorBox message={error} onRetry={reload} />}
+          </View>
+        }
+        renderSectionHeader={({ section }) => <DayHeader iso={section.title} />}
+        renderItem={({ item }) => <TxRow tx={item} showBank />}
+        ListEmptyComponent={data ? <Empty text="Aucune opération ce mois-ci." /> : <Loading />}
+        contentContainerStyle={{ paddingBottom: 32 }}
+      />
+    </SafeAreaView>
+  );
+}
+
+const s = StyleSheet.create({
+  flex: { flex: 1 },
+  header: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8 },
+  title: { fontSize: 22, fontWeight: '700' },
+  monthRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10, marginBottom: 6 },
+  month: { fontSize: 16, fontWeight: '600', minWidth: 130, textAlign: 'center' },
+  small: { fontSize: 13 },
+  big: { fontSize: 34, fontWeight: '700', marginVertical: 2, fontVariant: ['tabular-nums'] },
+  chips: { gap: 8, paddingHorizontal: 20, paddingVertical: 8 },
+});

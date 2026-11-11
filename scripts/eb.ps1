@@ -11,13 +11,17 @@
     .\eb.ps1 auth -Bank "BNP Paribas" -Country FR   # donne l'URL de connexion bancaire
     .\eb.ps1 session -Code "<url de retour ou code>" # finalise et sauvegarde la session
     .\eb.ps1 tx [-Days 30]                          # soldes + transactions de tous les comptes liés
+    .\eb.ps1 dump [-Days 90] [-Out fichier.json]    # export JSON brut (par défaut scripts\data\dump.json)
+    .\eb.ps1 push                                   # envoie sessions + comptes à Supabase
+                                                    #   (SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY)
 #>
 param(
-  [Parameter(Position = 0, Mandatory)][ValidateSet('check', 'list', 'auth', 'session', 'tx')][string]$Cmd,
+  [Parameter(Position = 0, Mandatory)][ValidateSet('check', 'list', 'auth', 'session', 'tx', 'dump', 'push')][string]$Cmd,
   [string]$Bank,
   [string]$Country = 'FR',
   [string]$Code,
-  [int]$Days = 30
+  [int]$Days = 30,
+  [string]$Out
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,7 +33,7 @@ $KeyPath  = $env:EB_KEY_PATH
 $Redirect = if ($env:EB_REDIRECT) { $env:EB_REDIRECT } else { 'https://localhost/callback' }
 $Store    = Join-Path $PSScriptRoot 'sessions.json'
 
-if (-not $AppId -or -not $KeyPath) { throw 'Définis EB_APP_ID et EB_KEY_PATH.' }
+if ($Cmd -ne 'push' -and (-not $AppId -or -not $KeyPath)) { throw 'Définis EB_APP_ID et EB_KEY_PATH.' }
 
 function B64Url([byte[]]$b) { [Convert]::ToBase64String($b).TrimEnd('=').Replace('+', '-').Replace('/', '_') }
 
@@ -139,6 +143,48 @@ switch ($Cmd) {
     $list += [pscustomobject]@{ session_id = $s.session_id; bank = $s.aspsp.name; country = $s.aspsp.country; valid_until = $s.access.valid_until; accounts = @($s.accounts | ForEach-Object { $_.uid }) }
     Save-Sessions $list
     "Session OK : {0} - {1} compte(s), valide jusqu'au {2}" -f $s.aspsp.name, @($s.accounts).Count, $s.access.valid_until
+  }
+
+  'dump' {
+    # Exporte comptes, soldes et transactions bruts en JSON (fichier -Out, ignoré par git si dans scripts/data)
+    if (-not $Out) { $Out = Join-Path $PSScriptRoot 'data\dump.json' }
+    New-Item -ItemType Directory -Force (Split-Path $Out) | Out-Null
+    $from = (Get-Date).AddDays(-$Days).ToString('yyyy-MM-dd')
+    $res = @()
+    foreach ($s in (Get-Sessions)) {
+      foreach ($uid in $s.accounts) {
+        $acc = [ordered]@{ bank = $s.bank; uid = $uid; details = $null; balances = @(); transactions = @(); errors = @() }
+        try { $acc.details = Call GET "/accounts/$uid/details" } catch { $acc.errors += "details: $_" }
+        try { $acc.balances = @((Call GET "/accounts/$uid/balances").balances) } catch { $acc.errors += "balances: $_" }
+        $ck = $null
+        try {
+          do {
+            $q = "/accounts/$uid/transactions?date_from=$from" + $(if ($ck) { "&continuation_key=$([uri]::EscapeDataString($ck))" })
+            $r = Call GET $q; $acc.transactions += $r.transactions; $ck = $r.continuation_key
+          } while ($ck)
+        } catch { $acc.errors += "transactions: $_" }
+        $res += [pscustomobject]$acc
+        "{0,-18} {1,4} transaction(s) {2}" -f $s.bank, $acc.transactions.Count, ($acc.errors -join ' | ')
+      }
+    }
+    [IO.File]::WriteAllText($Out, (ConvertTo-Json -InputObject ([object[]]$res) -Depth 12), (New-Object Text.UTF8Encoding $false))
+    "Écrit : $Out"
+  }
+
+  'push' {
+    # Copie les sessions locales dans Supabase : la fonction `sync` prend ensuite le relais.
+    $url = $env:SUPABASE_URL; $key = $env:SUPABASE_SERVICE_ROLE_KEY
+    if (-not $url -or -not $key) { throw 'Définis SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY.' }
+    $h = @{ apikey = $key; Authorization = "Bearer $key"; Prefer = 'resolution=merge-duplicates,return=minimal' }
+    function Upsert($table, $rows) {
+      $json = ConvertTo-Json -InputObject ([object[]]$rows) -Depth 5 -Compress
+      Invoke-WebRequest -UseBasicParsing -Method POST -Uri "$url/rest/v1/$table" -Headers $h `
+        -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) | Out-Null
+    }
+    $sessions = Get-Sessions
+    Upsert 'bank_sessions' @($sessions | ForEach-Object { @{ session_id = $_.session_id; bank = $_.bank; country = $_.country; valid_until = $_.valid_until } })
+    Upsert 'accounts' @($sessions | ForEach-Object { $s = $_; $s.accounts | ForEach-Object { @{ uid = $_; bank = $s.bank; session_id = $s.session_id } } })
+    "{0} session(s) et {1} compte(s) envoyés." -f @($sessions).Count, @($sessions | ForEach-Object { $_.accounts }).Count
   }
 
   'tx' {

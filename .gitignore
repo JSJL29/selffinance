@@ -2,3 +2,5 @@
 scripts/sessions*.json
 *.pem
 .env
+scripts/data/
+supabase/private/

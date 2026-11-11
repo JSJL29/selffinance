@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { connectBank } from '@/lib/data';
+import { showAlert } from '@/lib/dialog';
 
 /**
  * Connecte ou reconnecte une banque et affiche le résultat.
@@ -15,7 +15,7 @@ export function useConnectBank(onDone?: () => void | Promise<void>) {
       const r = await connectBank(bank);
       if (r.status === 'ok') {
         await onDone?.();
-        Alert.alert(
+        showAlert(
           `${bank} connectée`,
           r.newAccounts > 0
             ? `${r.newAccounts} nouveau${r.newAccounts > 1 ? 'x' : ''} compte${r.newAccounts > 1 ? 's' : ''}. L'historique arrive dans une minute.`
@@ -23,7 +23,7 @@ export function useConnectBank(onDone?: () => void | Promise<void>) {
         );
         return true;
       }
-      if (r.status === 'error') Alert.alert('Connexion à ' + bank, r.message);
+      if (r.status === 'error') showAlert('Connexion à ' + bank, r.message);
       return false;
     } finally {
       setBusy(null);

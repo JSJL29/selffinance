@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLoad } from '@/lib/data';
@@ -10,6 +10,7 @@ import { parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
+import { showAlert } from '@/lib/dialog';
 
 /** Création (sans `id`) ou modification d'un compte manuel. */
 export default function AccountEdit() {
@@ -58,14 +59,14 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
       if (account) router.back();
       else router.replace({ pathname: '/patrimoine/account/[id]', params: { id: newId } });
     } catch (e) {
-      Alert.alert('Compte', e instanceof Error ? e.message : String((e as { message?: string }).message ?? e));
+      showAlert('Compte', e instanceof Error ? e.message : String((e as { message?: string }).message ?? e));
     } finally {
       setBusy(false);
     }
   }
 
   function remove() {
-    Alert.alert(`Supprimer « ${account!.name} » ?`, 'Ses positions seront supprimées aussi.', [
+    showAlert(`Supprimer « ${account!.name} » ?`, 'Ses positions seront supprimées aussi.', [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer', style: 'destructive',
@@ -75,7 +76,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
             // Ferme le formulaire et le détail du compte supprimé (navigate empilerait un nouvel onglet).
             router.dismissTo('/patrimoine');
           } catch (e) {
-            Alert.alert('Compte', e instanceof Error ? e.message : String((e as { message?: string }).message ?? e));
+            showAlert('Compte', e instanceof Error ? e.message : String((e as { message?: string }).message ?? e));
           }
         },
       },

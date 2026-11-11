@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { ago, money, pct, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { Empty, ErrorBox, Loading } from '@/components/ui';
 import { BackLink } from '@/components/form';
+import { showAlert } from '@/lib/dialog';
 
 /** Détail d'un compte manuel : solde (épargne) ou liquidités + positions (placements). */
 export default function ManualAccountDetail() {
@@ -105,10 +106,10 @@ function IbkrSyncBox({ account, onDone }: { account: ManualAccount; onDone: () =
     try {
       const r = await syncIbkr();
       await onDone();
-      Alert.alert('IBKR synchronisé', `${r.positions} position${r.positions > 1 ? 's' : ''} · relevé du ${shortDate(r.date)}`);
+      showAlert('IBKR synchronisé', `${r.positions} position${r.positions > 1 ? 's' : ''} · relevé du ${shortDate(r.date)}`);
     } catch (e) {
       await onDone();
-      Alert.alert('Synchro IBKR', e instanceof Error ? e.message : String(e));
+      showAlert('Synchro IBKR', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }

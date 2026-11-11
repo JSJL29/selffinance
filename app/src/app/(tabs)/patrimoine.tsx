@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { netWorth } from '@/lib/networth';
 import { money, pct } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
+import { showAlert } from '@/lib/dialog';
 
 /** Onglet Patrimoine : total général, plus-value des placements, comptes par catégorie. */
 export default function Patrimoine() {
@@ -92,9 +93,9 @@ function ConnectIbkr({ onDone }: { onDone: () => Promise<void> }) {
     setBusy(true);
     try {
       const r = await syncIbkr();
-      Alert.alert('IBKR connecté', `${r.positions} position${r.positions > 1 ? 's' : ''} récupérée${r.positions > 1 ? 's' : ''}.`);
+      showAlert('IBKR connecté', `${r.positions} position${r.positions > 1 ? 's' : ''} récupérée${r.positions > 1 ? 's' : ''}.`);
     } catch (e) {
-      Alert.alert('IBKR', e instanceof Error ? e.message : String(e));
+      showAlert('IBKR', e instanceof Error ? e.message : String(e));
     } finally {
       await onDone();
       setBusy(false);

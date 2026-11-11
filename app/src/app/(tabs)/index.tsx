@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { ago, money } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
 import { BankDot, ErrorBox, Loading } from '@/components/ui';
+import { showAlert } from '@/lib/dialog';
 
 export default function Accounts() {
   const t = useTheme();
@@ -70,11 +71,11 @@ function SyncButton({ onDone }: { onDone: () => Promise<void> }) {
     const err = await syncNow();
     await Promise.all([onDone(), budget.reload()]);
     setBusy(false);
-    if (err) Alert.alert('Synchronisation', err);
+    if (err) showAlert('Synchronisation', err);
   }
 
   function confirm() {
-    Alert.alert(
+    showAlert(
       'Synchroniser maintenant ?',
       `Les banques limitent les accès à 4 par jour, synchros automatiques comprises. Il te restera ${left! - 1} synchro${left! - 1 > 1 ? 's' : ''} manuelle${left! - 1 > 1 ? 's' : ''} aujourd'hui.`,
       [{ text: 'Annuler', style: 'cancel' }, { text: 'Synchroniser', onPress: run }],

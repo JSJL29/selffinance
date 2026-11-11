@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { useConnectBank } from '@/components/connect';
 import { ago, maskIban, money, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { DayHeader, Empty, ErrorBox, Loading, TxRow } from '@/components/ui';
+import { showAlert } from '@/lib/dialog';
 
 export default function AccountDetail() {
   const t = useTheme();
@@ -74,7 +75,7 @@ function ConsentBox({ bank, until, onDone }: { bank: string; until: string | nul
   const urgent = left != null && left <= CONSENT_WARN_DAYS;
 
   function confirm() {
-    Alert.alert(
+    showAlert(
       `Reconnecter ${bank} ?`,
       'Tu vas te connecter sur le site de ta banque puis valider dans son app. Ton historique est conservé.',
       [{ text: 'Annuler', style: 'cancel' }, { text: 'Continuer', onPress: () => connect(bank) }],
@@ -121,7 +122,7 @@ function BalanceEditor({ account, onSaved }: { account: AccountRow; onSaved: () 
       setEditing(false);
       onSaved();
     } catch (e) {
-      Alert.alert('Erreur', e instanceof Error ? e.message : String(e));
+      showAlert('Erreur', e instanceof Error ? e.message : String(e));
     }
   }
 

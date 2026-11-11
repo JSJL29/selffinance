@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
@@ -18,7 +19,9 @@ export default function RootLayout() {
   if (session === undefined) return null; // l'écran de démarrage reste affiché
 
   return (
-    <>
+    // Version web (PC) : l'app reste dans une colonne de la largeur d'un téléphone, centrée.
+    <View style={Platform.OS === 'web' ? [s.webPage, { backgroundColor: t.border }] : s.flex}>
+      <View style={Platform.OS === 'web' ? [s.webFrame, { backgroundColor: t.bg }] : s.flex}>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }}>
         <Stack.Protected guard={!!session}>
@@ -35,6 +38,13 @@ export default function RootLayout() {
           <Stack.Screen name="login" />
         </Stack.Protected>
       </Stack>
-    </>
+      </View>
+    </View>
   );
 }
+
+const s = StyleSheet.create({
+  flex: { flex: 1 },
+  webPage: { flex: 1, alignItems: 'center' },
+  webFrame: { flex: 1, width: '100%', maxWidth: 480, overflow: 'hidden' },
+});

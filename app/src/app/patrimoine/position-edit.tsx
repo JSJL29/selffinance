@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLoad } from '@/lib/data';
@@ -12,6 +12,7 @@ import { money, parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
+import { showAlert } from '@/lib/dialog';
 
 type Mode = 'quoted' | 'value' | 'unlisted';
 const MODES: { value: Mode; label: string }[] = [
@@ -35,7 +36,7 @@ export default function PositionEdit() {
 
 /** Demande confirmation avant d'ajouter un achat à une position déjà détenue. */
 function confirmMerge(name: string, held: number, cur: string): Promise<boolean> {
-  return new Promise((resolve) => Alert.alert(
+  return new Promise((resolve) => showAlert(
     'Titre déjà détenu',
     `Tu as déjà ${fmt(held)} × ${name} sur ce compte. Les quantités seront additionnées et le PRU recalculé (moyenne pondérée, ${cur}).`,
     [
@@ -100,7 +101,7 @@ function NewForm({ accountId }: { accountId: string }) {
       const held = await findPosition(accountId, instrumentId);
       if (held) {
         if (held.cost_currency !== currency) {
-          Alert.alert('Devise différente',
+          showAlert('Devise différente',
             `Ta position existante a un PRU en ${currencySymbol(held.cost_currency)}. Saisis cet achat dans la même devise.`);
           return;
         }
@@ -112,7 +113,7 @@ function NewForm({ accountId }: { accountId: string }) {
       }
       router.back();
     } catch (e) {
-      Alert.alert('Position', errMsg(e));
+      showAlert('Position', errMsg(e));
     } finally {
       setBusy(false);
     }
@@ -220,14 +221,14 @@ function EditForm({ p }: { p: PositionRow }) {
       }
       router.back();
     } catch (e) {
-      Alert.alert('Position', errMsg(e));
+      showAlert('Position', errMsg(e));
     } finally {
       setBusy(false);
     }
   }
 
   function remove() {
-    Alert.alert(`Supprimer « ${p.instrument_name} » ?`, undefined, [
+    showAlert(`Supprimer « ${p.instrument_name} » ?`, undefined, [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer', style: 'destructive',
@@ -236,7 +237,7 @@ function EditForm({ p }: { p: PositionRow }) {
             await deletePosition(p.id);
             router.back();
           } catch (e) {
-            Alert.alert('Position', errMsg(e));
+            showAlert('Position', errMsg(e));
           }
         },
       },

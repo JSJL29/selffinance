@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MAX_AUTO_SYNCS, fetchAutoHours, saveAutoHours, useLoad } from '@/lib/data';
 import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
+import { showAlert } from '@/lib/dialog';
 
 const DAILY_LIMIT = 4; // accès bancaires par jour (DSP2), automatiques + manuels
 const DEFAULT_HOURS = [6, 12, 19];
@@ -60,7 +61,7 @@ export default function Settings() {
       await saveAutoHours(hours);
       router.back();
     } catch (e) {
-      Alert.alert('Réglages', e instanceof Error ? e.message : String(e));
+      showAlert('Réglages', e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }

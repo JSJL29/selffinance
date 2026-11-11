@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useFocusEffect } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { isoDay } from './format';
 
@@ -204,6 +205,10 @@ export type ConnectResult =
  * puis revient automatiquement une fois la connexion validée.
  */
 export async function connectBank(bank: string, country = 'FR'): Promise<ConnectResult> {
+  // Le retour de la banque vise l'app du téléphone (selffinance:// ou Expo Go).
+  if (Platform.OS === 'web') {
+    return { status: 'error', message: 'La connexion d’une banque se fait depuis l’app sur ton téléphone.' };
+  }
   const returnTo = Linking.createURL('bank-connected');
   const { data, error } = await supabase.functions.invoke('bank/start', {
     body: { bank, country, return_to: returnTo },

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { Aspsp, fetchAccounts, fetchAspsps, useLoad } from '@/lib/data';
 import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
 import { useConnectBank } from '@/components/connect';
+import { showAlert } from '@/lib/dialog';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -27,7 +28,7 @@ export default function AddBank() {
 
   function pick(a: Aspsp) {
     const again = connected.has(a.name);
-    Alert.alert(
+    showAlert(
       again ? `Reconnecter ${a.name} ?` : `Connecter ${a.name} ?`,
       `Tu vas te connecter sur le site de ta banque puis valider dans son app. L'accès est valable ${Math.min(a.max_days, 180)} jours.`,
       [

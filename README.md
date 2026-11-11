@@ -5,99 +5,116 @@
 # SelfFinance
 
 **Tous mes comptes, au même endroit.**
-Une app perso (Android d'abord) qui regroupe soldes et transactions de toutes mes banques grâce à l'Open Banking.
+Une app perso Android qui regroupe comptes bancaires, épargne et placements, avec les plus-values, grâce à l'Open Banking.
 
-![Statut](https://img.shields.io/badge/statut-prototype-orange)
 ![Plateforme](https://img.shields.io/badge/plateforme-Android-3DDC84?logo=android&logoColor=white)
+![Expo](https://img.shields.io/badge/app-Expo%20SDK%2058-000020?logo=expo&logoColor=white)
+![Supabase](https://img.shields.io/badge/serveur-Supabase-3ECF8E?logo=supabase&logoColor=white)
 ![Open Banking](https://img.shields.io/badge/Open%20Banking-Enable%20Banking-1f6feb)
 ![Privé](https://img.shields.io/badge/usage-perso-lightgrey)
+
+**[📘 Installer ta propre copie → docs/SETUP.md](docs/SETUP.md)**
 
 </div>
 
 ---
 
-## ✨ Ce que fera l'app
+## ✨ Ce que fait l'app
 
 | | Écran | Description |
 |---|---|---|
-| 🏦 | **Mes comptes** | Tous les comptes avec leur solde et le total global. |
-| 📄 | **Détail d'un compte** | Les transactions d'un compte, jour par jour. |
-| 🔀 | **Transactions globales** | Toutes les banques mélangées, avec un filtre par banque. Les dépenses sont totalisées **hors virements internes**. |
+| 🏦 | **Comptes** | Tous les comptes bancaires, leur solde et le total. Bouton de synchro, réglages des synchros automatiques, ajout et reconnexion des banques. |
+| 📄 | **Détail d'un compte** | Les opérations jour par jour, l'état de l'accès bancaire, et un solde saisi à la main si la banque n'en donne pas. |
+| 🥧 | **Patrimoine** | Total général (banques + épargne + placements) et plus-value globale. Livrets, PEA, CTO, assurance-vie, PER, épargne salariale, IBKR. |
+| 🔀 | **Transactions** | Toutes les banques mélangées, mois par mois, avec un filtre par banque. Les dépenses sont totalisées **hors virements internes**. |
 
-Les virements entre mes propres comptes (SG → IBKR, SG → Revolut…) sont détectés et grisés. Comme ça, le même argent n'est pas compté deux fois.
+Les virements entre mes propres comptes (SG → IBKR, SG → Revolut…) sont détectés et grisés : le même argent n'est jamais compté deux fois.
 
 ## 🔌 Sources de données
 
-| Source | Méthode | Statut |
+| Source | Méthode | Mise à jour |
 |---|---|---|
-| Société Générale | Open Banking (Enable Banking) | ✅ Connectée |
-| Revolut | Open Banking (Enable Banking) | ✅ Connectée |
-| BNP Paribas | Open Banking (Enable Banking) | ✅ Connectée |
-| Fortuneo | Open Banking (Enable Banking) | 🟡 Disponible, à connecter |
-| Trade Republic (espèces) | Open Banking (Enable Banking) | 🟡 Disponible, à connecter (sans libellés) |
-| IBKR | Saisie des positions pour l'instant, puis API officielle (Flex Web Service) | 🟡 Saisie manuelle |
-| PEA / CTO Fortuneo, Trade Republic, Revolut | Saisie des positions + cours automatiques (Yahoo Finance) | ✅ Onglet Patrimoine |
-| Natixis Interépargne | Saisie des parts + valeur de part (manuelle, AMF non automatisable pour l'instant) | ✅ Onglet Patrimoine |
-| Livret A, poches Revolut, assurance-vie (fonds euros) | Saisie manuelle | ✅ Onglet Patrimoine |
+| Comptes courants (SG, Revolut, BNP…) | Open Banking via **Enable Banking** | Auto aux heures choisies (max 4 accès/jour, limite DSP2) + bouton |
+| IBKR | API officielle **Flex Web Service** (lecture seule) | Auto chaque jour à 7 h + bouton |
+| Actions et ETF (PEA, CTO…) | Positions saisies (quantité + PRU), cours **Yahoo Finance** | Auto chaque jour ouvré à 19 h |
+| Fonds d'épargne salariale (FCPE) | Positions saisies, valeur de part à la main | Manuelle |
+| Livret A, LDDS, fonds euros… | Solde ou valeur saisis | Manuelle |
 
-> L'Open Banking (DSP2) ne couvre que les **comptes de paiement**. L'épargne et l'investissement passent donc par d'autres moyens. Tous les détails sont dans [`docs/open-banking.md`](docs/open-banking.md).
+> L'Open Banking (DSP2) ne couvre que les **comptes de paiement** : l'épargne et l'investissement passent par d'autres moyens. Détails et décisions dans [`docs/open-banking.md`](docs/open-banking.md).
 
-## 🧭 Architecture visée
+## 🧭 Architecture
 
 ```mermaid
 flowchart LR
     B[🏦 Banques] -- DSP2 --> EB[Enable Banking]
-    EB -- "sync ~4×/jour" --> S[(Serveur<br/>clé privée + base)]
-    IB[IBKR Flex] --> S
-    S -- API authentifiée --> A[📱 App Android]
+    EB --> SYNC
+    IB[IBKR Flex] --> IBKR
+    Y[Yahoo Finance] --> Q
+    subgraph Supabase
+      SYNC[fonction sync] --> DB[(Postgres<br/>RLS)]
+      BANK[fonction bank] --> DB
+      IBKR[fonction ibkr] --> DB
+      Q[fonction quotes] --> DB
+      CRON[pg_cron] --> SYNC & IBKR & Q
+    end
+    DB -- API authentifiée --> A[📱 App Expo]
+    A -- connexion d'une banque --> BANK
 ```
 
-La **clé privée Enable Banking reste sur le serveur**, jamais dans le téléphone. L'app ne parle qu'au serveur.
+- La **clé privée Enable Banking et tous les secrets restent sur le serveur** (Vault + secrets de fonctions), jamais dans le téléphone.
+- L'app ne parle qu'à Supabase, avec le compte du propriétaire ; chaque table est protégée par des règles d'accès (RLS).
+- Les tâches automatiques tournent dans la base (`pg_cron`), même quand le téléphone et le PC sont éteints.
 
-## 🚀 Tester la récupération (script PowerShell)
+## 🚀 Installer
 
-Le prototype actuel est un script autonome pour Windows (PowerShell 5.1). La signature JWT passe par l'`openssl` fourni avec Git for Windows.
-
-```powershell
-$env:EB_APP_ID   = "<UUID de l'app Enable Banking>"
-$env:EB_KEY_PATH = "C:\chemin\vers\cle.pem"
-
-.\scripts\eb.ps1 check                               # mes banques sont-elles disponibles ?
-.\scripts\eb.ps1 list -Country FR                    # toutes les banques d'un pays
-.\scripts\eb.ps1 auth -Bank "BNP Paribas"            # lien de connexion à la banque
-.\scripts\eb.ps1 session -Code "<URL localhost>"     # enregistre la session
-.\scripts\eb.ps1 tx -Days 30                         # soldes + transactions
-```
-
-Après la connexion à la banque, le navigateur affiche une erreur `localhost` : **c'est normal**. Il suffit de copier l'URL (celle qui contient `code=`) et de la passer à `session`.
+Tout est expliqué pas à pas dans **[docs/SETUP.md](docs/SETUP.md)** : Supabase, Enable Banking, secrets, app sur le téléphone, connexion des banques, Patrimoine, IBKR, APK et dépannage. Chacun installe **sa propre copie** : aucune donnée n'est partagée.
 
 ## 🗺️ Feuille de route
 
-- [x] Valider l'Open Banking en sandbox
-- [x] App Enable Banking en production + SG, Revolut, BNP connectées
-- [ ] Connecter Fortuneo et Trade Republic
-- [x] Choisir la stack de l'app (Expo ou web app) + backend (Supabase)
-- [x] Synchro automatique côté serveur (heures réglables, bouton manuel)
+- [x] Open Banking validé en sandbox, puis en production (SG, Revolut, BNP)
+- [x] App Expo + backend Supabase
+- [x] Synchro automatique côté serveur (heures réglables, bouton manuel, budget DSP2)
 - [x] Écrans : comptes, détail, transactions globales
 - [x] Détection des virements internes
-- [ ] IBKR via le Flex Web Service
-- [x] Patrimoine : comptes manuels, positions, cours, plus-values
+- [x] Connexion et reconnexion des banques depuis l'app
+- [x] Patrimoine : comptes manuels, positions, cours, plus-values, € ou $
+- [x] IBKR via le Flex Web Service
 - [ ] Historique des opérations (achats, ventes, dividendes)
 - [ ] Catégorisation des dépenses, abonnements, budgets
+- [ ] Version iPhone
 
 ## 📁 Structure
 
 ```
 selffinance/
-├── assets/            icône
+├── app/                      app Expo (Expo Router)
+│   ├── src/app/              écrans : (tabs)/, account/, patrimoine/, settings, add-bank…
+│   ├── src/lib/              accès aux données, calculs, formatage
+│   └── tests/                tests unitaires (npm test)
+├── supabase/
+│   ├── migrations/           schéma, sécurité, tâches automatiques
+│   ├── functions/            sync · bank · quotes · ibkr
+│   ├── setup/                modèle des secrets (secrets.example.sql)
+│   └── tests/                vérifications SQL
 ├── docs/
-│   └── open-banking.md   recherche, couverture des banques, décisions
-└── scripts/
-    └── eb.ps1            client Enable Banking (test)
+│   ├── SETUP.md              guide d'installation complet
+│   ├── open-banking.md       recherche, couverture des banques, décisions
+│   └── superpowers/          conception et plans
+└── scripts/eb.ps1            client Enable Banking en ligne de commande (tests, facultatif)
 ```
+
+## 🧪 Tests
+
+```bash
+cd app && npm test                         # calculs et formatage
+node --test supabase/functions/ibkr/       # lecture des relevés IBKR
+```
+
+Les fichiers de `supabase/tests/` se lancent dans le SQL Editor de Supabase : ils annulent tout ce qu'ils créent et renvoient `OK`.
 
 ## 🔒 Sécurité
 
-- Les sessions bancaires (`scripts/sessions*.json`), les clés (`*.pem`) et le fichier `.env` sont **exclus de git**.
-- L'accès aux banques est en **lecture seule**.
-- Les consentements expirent au bout de 90 à 180 jours, selon la banque.
+- Exclus de git : clés (`*.pem`), `.env*`, sessions bancaires, `supabase/setup/secrets.sql`, `supabase/private/`, exports de données.
+- Accès aux banques et à IBKR en **lecture seule**.
+- Seul le **premier compte créé** (le propriétaire) a accès aux données.
+- Les accès bancaires expirent au bout de 90 à 180 jours selon la banque ; l'app prévient 15 jours avant.

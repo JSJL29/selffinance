@@ -5,3 +5,4 @@ scripts/sessions*.json
 scripts/data/
 supabase/private/
 .superpowers/
+supabase/setup/secrets.sql

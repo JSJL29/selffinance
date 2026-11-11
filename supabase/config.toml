@@ -424,3 +424,17 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# SelfFinance : les fonctions font leur propre authentification
+# (secret Vault pour le cron, JWT du propriétaire pour l'app).
+[functions.sync]
+verify_jwt = false
+
+[functions.bank]
+verify_jwt = false
+
+[functions.quotes]
+verify_jwt = false
+
+[functions.ibkr]
+verify_jwt = false

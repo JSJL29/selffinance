@@ -13,6 +13,7 @@ import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
 import { showAlert } from '@/lib/dialog';
+import { goBack } from '@/lib/nav';
 
 type Mode = 'quoted' | 'value' | 'unlisted';
 const MODES: { value: Mode; label: string }[] = [
@@ -111,7 +112,7 @@ function NewForm({ accountId }: { accountId: string }) {
       } else {
         await savePosition({ account_id: accountId, instrument_id: instrumentId, cost_currency: currency, ...added });
       }
-      router.back();
+      goBack({ pathname: '/patrimoine/account/[id]', params: { id: accountId } });
     } catch (e) {
       showAlert('Position', errMsg(e));
     } finally {
@@ -219,7 +220,7 @@ function EditForm({ p }: { p: PositionRow }) {
       if (editPrice && nPrice != null && (nPrice !== p.last_price || currencyChanged)) {
         await setManualPrice(p.instrument_id, nPrice, manual ? currency : undefined);
       }
-      router.back();
+      goBack({ pathname: '/patrimoine/account/[id]', params: { id: p.account_id } });
     } catch (e) {
       showAlert('Position', errMsg(e));
     } finally {
@@ -235,7 +236,7 @@ function EditForm({ p }: { p: PositionRow }) {
         onPress: async () => {
           try {
             await deletePosition(p.id);
-            router.back();
+            goBack({ pathname: '/patrimoine/account/[id]', params: { id: p.account_id } });
           } catch (e) {
             showAlert('Position', errMsg(e));
           }
@@ -290,7 +291,7 @@ function Screen({ title, children }: { title: string; children: React.ReactNode 
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-          <BackLink label="Compte" />
+          <BackLink label="Compte" fallback="/patrimoine" />
           <Text style={[s.title, { color: t.text }]} numberOfLines={2}>{title}</Text>
           {children}
         </ScrollView>

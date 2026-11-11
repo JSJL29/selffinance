@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MAX_AUTO_SYNCS, fetchAutoHours, saveAutoHours, useLoad } from '@/lib/data';
 import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
 import { showAlert } from '@/lib/dialog';
+import { goBack } from '@/lib/nav';
 
 const DAILY_LIMIT = 4; // accès bancaires par jour (DSP2), automatiques + manuels
 const DEFAULT_HOURS = [6, 12, 19];
@@ -59,7 +59,7 @@ export default function Settings() {
     setBusy(true);
     try {
       await saveAutoHours(hours);
-      router.back();
+      goBack('/');
     } catch (e) {
       showAlert('Réglages', e instanceof Error ? e.message : String(e));
     } finally {
@@ -70,7 +70,7 @@ export default function Settings() {
   return (
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <ScrollView contentContainerStyle={s.content}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={s.back}>
+        <Pressable onPress={() => goBack('/')} hitSlop={12} style={s.back}>
           <Ionicons name="chevron-back" size={18} color={t.primary} />
           <Text style={{ color: t.primary, fontSize: 15 }}>Comptes</Text>
         </Pressable>

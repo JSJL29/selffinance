@@ -8,6 +8,7 @@ import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
 import { useConnectBank } from '@/components/connect';
 import { showAlert } from '@/lib/dialog';
+import { goBack } from '@/lib/nav';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -46,7 +47,7 @@ export default function AddBank() {
   return (
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <View style={s.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={s.back}>
+        <Pressable onPress={() => goBack('/')} hitSlop={12} style={s.back}>
           <Ionicons name="chevron-back" size={18} color={t.primary} />
           <Text style={{ color: t.primary, fontSize: 15 }}>Comptes</Text>
         </Pressable>

@@ -1,12 +1,13 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { router } from 'expo-router';
+import { Href } from 'expo-router';
+import { goBack } from '@/lib/nav';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/lib/theme';
 
-export function BackLink({ label }: { label: string }) {
+export function BackLink({ label, fallback = '/' }: { label: string; fallback?: Href }) {
   const t = useTheme();
   return (
-    <Pressable onPress={() => router.back()} hitSlop={12} style={s.back}>
+    <Pressable onPress={() => goBack(fallback)} hitSlop={12} style={s.back}>
       <Ionicons name="chevron-back" size={18} color={t.primary} />
       <Text style={{ color: t.primary, fontSize: 15 }}>{label}</Text>
     </Pressable>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import {
   AccountRow, CONSENT_WARN_DAYS, byDay, consentDaysLeft, fetchAccounts, fetchAccountTx, groupAccounts, setManualBalance, useLoad,
@@ -11,6 +11,7 @@ import { ago, maskIban, money, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { DayHeader, Empty, ErrorBox, Loading, TxRow } from '@/components/ui';
 import { showAlert } from '@/lib/dialog';
+import { goBack } from '@/lib/nav';
 
 export default function AccountDetail() {
   const t = useTheme();
@@ -35,7 +36,7 @@ export default function AccountDetail() {
         refreshControl={<RefreshControl refreshing={accounts.refreshing || txs.refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}
         ListHeaderComponent={
           <View style={s.header}>
-            <Pressable onPress={() => router.back()} hitSlop={12} style={s.back}>
+            <Pressable onPress={() => goBack('/')} hitSlop={12} style={s.back}>
               <Ionicons name="chevron-back" size={18} color={t.primary} />
               <Text style={{ color: t.primary, fontSize: 15 }}>Comptes</Text>
             </Pressable>

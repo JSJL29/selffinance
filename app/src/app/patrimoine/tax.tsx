@@ -29,7 +29,7 @@ export default function Tax() {
   return (
     <SafeAreaView edges={['top']} style={[st.flex, { backgroundColor: t.bg }]}>
       <ScrollView contentContainerStyle={st.content}>
-        <BackLink label="Patrimoine" />
+        <BackLink label="Patrimoine" fallback="/patrimoine" />
         <Text style={[st.title, { color: t.text }]}>Bilan fiscal</Text>
         <View style={st.chips}>
           {(years.data ?? [year]).map((y) => <Chip key={y} label={String(y)} on={y === year} onPress={() => setYear(y)} />)}

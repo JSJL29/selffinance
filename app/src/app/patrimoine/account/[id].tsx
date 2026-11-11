@@ -34,7 +34,7 @@ export default function ManualAccountDetail() {
       <ScrollView
         contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={account.refreshing || positions.refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}>
-        <BackLink label="Patrimoine" />
+        <BackLink label="Patrimoine" fallback="/patrimoine" />
         {account.error && <ErrorBox message={account.error} onRetry={account.reload} />}
         {a && (
           <>

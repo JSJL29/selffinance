@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useLoad } from '@/lib/data';
 import { addDividend, fetchPositions } from '@/lib/patrimoine';
 import { frDate, isoDay, money, parseAmount, parseFrDate } from '@/lib/format';
@@ -9,6 +9,7 @@ import { useTheme } from '@/lib/theme';
 import { showAlert } from '@/lib/dialog';
 import { Chip } from '@/components/ui';
 import { BackLink, CurrencyPicker, Field, PrimaryButton, currencySymbol } from '@/components/form';
+import { goBack } from '@/lib/nav';
 
 /** Saisie d'un dividende reçu sur un compte manuel. */
 export default function Dividend() {
@@ -33,7 +34,7 @@ export default function Dividend() {
     try {
       await addDividend({ account_id: accountId, instrument_id: instrument, date: isoDate!, amount: nAmount!,
         tax_withheld: nTax!, currency });
-      router.back();
+      goBack({ pathname: '/patrimoine/account/[id]', params: { id: accountId } });
     } catch (e) {
       showAlert('Dividende', e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e));
     } finally {
@@ -45,7 +46,7 @@ export default function Dividend() {
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-          <BackLink label="Compte" />
+          <BackLink label="Compte" fallback={{ pathname: '/patrimoine/account/[id]', params: { id: accountId } }} />
           <Text style={[s.title, { color: t.text }]}>Dividende reçu</Text>
 
           <Text style={[s.label, { color: t.muted }]}>TITRE (FACULTATIF)</Text>

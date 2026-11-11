@@ -57,7 +57,7 @@ function SellForm({ p }: { p: PositionRow }) {
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-          <BackLink label="Position" />
+          <BackLink label="Position" fallback="/patrimoine" />
           <Text style={[s.title, { color: t.text }]} numberOfLines={2}>Vendre · {p.instrument_name}</Text>
           <Text style={[s.small, { color: t.muted }]}>
             Tu détiens {String(p.quantity).replace('.', ',')} titres · PRU {money(p.avg_cost, p.cost_currency)}

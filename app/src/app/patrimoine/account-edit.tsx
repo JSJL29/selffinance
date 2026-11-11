@@ -11,6 +11,7 @@ import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
 import { showAlert } from '@/lib/dialog';
+import { goBack } from '@/lib/nav';
 
 /** Création (sans `id`) ou modification d'un compte manuel. */
 export default function AccountEdit() {
@@ -56,7 +57,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
         id: account?.id, name: finalName, institution, kind, envelope, cash_balance: amount ?? 0,
         currency: account?.sync_source ? account.currency : currency,
       });
-      if (account) router.back();
+      if (account) goBack({ pathname: '/patrimoine/account/[id]', params: { id: account.id } });
       else router.replace({ pathname: '/patrimoine/account/[id]', params: { id: newId } });
     } catch (e) {
       showAlert('Compte', e instanceof Error ? e.message : String((e as { message?: string }).message ?? e));
@@ -87,7 +88,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-          <BackLink label={account ? account.name : 'Patrimoine'} />
+          <BackLink label={account ? account.name : 'Patrimoine'} fallback={account ? { pathname: '/patrimoine/account/[id]', params: { id: account.id } } : '/patrimoine'} />
           <Text style={[s.title, { color: t.text }]}>{account ? 'Modifier le compte' : 'Nouveau compte'}</Text>
 
           <Text style={[s.label, { color: t.muted }]}>TYPE</Text>

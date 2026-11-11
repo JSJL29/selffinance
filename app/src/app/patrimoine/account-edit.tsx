@@ -9,7 +9,7 @@ import {
 import { parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
-import { BackLink, DangerLink, Field, PrimaryButton } from '@/components/form';
+import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
 
 /** Création (sans `id`) ou modification d'un compte manuel. */
 export default function AccountEdit() {
@@ -40,6 +40,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
   const [name, setName] = useState(account?.name ?? '');
   const [institution, setInstitution] = useState(account?.institution ?? '');
   const [cash, setCash] = useState(account ? String(account.cash_balance).replace('.', ',') : '');
+  const [currency, setCurrency] = useState(account?.currency ?? 'EUR');
   const [busy, setBusy] = useState(false);
 
   const kind = ENVELOPES.find((e) => e.value === envelope)!.kind;
@@ -52,6 +53,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
     try {
       const newId = await saveManualAccount({
         id: account?.id, name: finalName, institution, kind, envelope, cash_balance: amount ?? 0,
+        currency: account?.sync_source ? account.currency : currency,
       });
       if (account) router.back();
       else router.replace({ pathname: '/patrimoine/account/[id]', params: { id: newId } });
@@ -96,11 +98,16 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
 
           <Field label="Établissement" value={institution} onChangeText={setInstitution} placeholder="Fortuneo, Boursorama, Natixis…" />
           <Field label="Nom" value={name} onChangeText={setName} placeholder={finalName || 'Ex. PEA Fortuneo'} />
-          {!account?.sync_source && <Field
-            label={kind === 'savings' ? 'Solde' : 'Liquidités'}
-            hint={kind === 'savings' ? undefined : 'Argent non investi sur le compte. Les titres s’ajoutent ensuite.'}
-            value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="0,00"
-          />}
+          {!account?.sync_source && (
+            <>
+              <CurrencyPicker value={currency} onChange={setCurrency} label="Devise du compte" />
+              <Field
+                label={`${kind === 'savings' ? 'Solde' : 'Liquidités'} (${currencySymbol(currency)})`}
+                hint={kind === 'savings' ? undefined : 'Argent non investi sur le compte. Les titres s’ajoutent ensuite.'}
+                value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="0,00"
+              />
+            </>
+          )}
           {amount == null && <Text style={{ color: t.danger }}>Montant invalide.</Text>}
 
           <PrimaryButton label={account ? 'Enregistrer' : 'Créer le compte'} onPress={save} disabled={!valid} busy={busy} />

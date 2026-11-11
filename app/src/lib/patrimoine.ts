@@ -138,6 +138,7 @@ export type AccountInput = {
   kind: AccountKind;
   envelope: Envelope;
   cash_balance: number;
+  currency?: string;
 };
 
 /** Crée ou met à jour un compte manuel ; renvoie son id. */
@@ -148,6 +149,7 @@ export async function saveManualAccount(a: AccountInput): Promise<string> {
     kind: a.kind,
     envelope: a.envelope,
     cash_balance: a.cash_balance,
+    currency: a.currency ?? 'EUR',
     cash_updated_at: isoDay(new Date()),
   };
   const q = a.id
@@ -212,10 +214,12 @@ export async function upsertInstrument(r: SearchResult | ManualInstrument): Prom
   return data.id as string;
 }
 
-export async function setManualPrice(instrumentId: string, price: number) {
+/** Cours saisi à la main ; `currency` change aussi la devise d'un titre manuel. */
+export async function setManualPrice(instrumentId: string, price: number, currency?: string) {
   const date = isoDay(new Date());
   const { error } = await supabase.from('instruments').update({
     last_price: price, last_price_date: date, price_updated_at: new Date().toISOString(), price_error: null,
+    ...(currency ? { currency } : {}),
   }).eq('id', instrumentId);
   if (error) throw error;
   await supabase.from('instrument_prices').upsert({ instrument_id: instrumentId, date, price });

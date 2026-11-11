@@ -11,7 +11,7 @@ import { canEditPrice, mergePosition } from '@/lib/positions';
 import { money, parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
-import { BackLink, DangerLink, Field, PrimaryButton } from '@/components/form';
+import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
 
 type Mode = 'quoted' | 'value' | 'unlisted';
 const MODES: { value: Mode; label: string }[] = [
@@ -59,7 +59,9 @@ function NewForm({ accountId }: { accountId: string }) {
   const [qty, setQty] = useState('');
   const [cost, setCost] = useState('');
   const [price, setPrice] = useState('');
+  const [currency, setCurrency] = useState<string>('EUR');
   const [busy, setBusy] = useState(false);
+  const sym = currencySymbol(currency);
 
   // Recherche avec un délai de 400 ms après la dernière frappe.
   useEffect(() => {
@@ -92,16 +94,21 @@ function NewForm({ accountId }: { accountId: string }) {
     try {
       const instrumentId =
         mode === 'quoted' ? await upsertInstrument(picked!)
-        : await upsertInstrument({ name, type: mode === 'value' ? 'fonds_euros' : 'fcpe', price: nPrice! });
+        : await upsertInstrument({ name, type: mode === 'value' ? 'fonds_euros' : 'fcpe', currency, price: nPrice! });
       const added = { quantity: mode === 'value' ? 1 : nQty!, avg_cost: nCost! };
       // Titre déjà détenu sur ce compte : on additionne au lieu d'écraser.
       const held = await findPosition(accountId, instrumentId);
       if (held) {
+        if (held.cost_currency !== currency) {
+          Alert.alert('Devise différente',
+            `Ta position existante a un PRU en ${currencySymbol(held.cost_currency)}. Saisis cet achat dans la même devise.`);
+          return;
+        }
         if (!(await confirmMerge(picked?.name ?? name, held.quantity, held.cost_currency))) return;
         await savePosition({ id: held.id, account_id: accountId, instrument_id: instrumentId,
           cost_currency: held.cost_currency, ...mergePosition(held, added) });
       } else {
-        await savePosition({ account_id: accountId, instrument_id: instrumentId, ...added });
+        await savePosition({ account_id: accountId, instrument_id: instrumentId, cost_currency: currency, ...added });
       }
       router.back();
     } catch (e) {
@@ -153,19 +160,27 @@ function NewForm({ accountId }: { accountId: string }) {
           placeholder={mode === 'value' ? 'Fonds euros Generali' : 'Natixis Avenir 4, FCPE Mon Entreprise…'} />
       )}
 
+      <CurrencyPicker
+        value={currency} onChange={setCurrency}
+        label={mode === 'quoted' ? 'Devise du PRU' : 'Devise des montants'}
+      />
+
       {mode === 'value' ? (
         <>
-          <Field label="Montant versé" value={cost} onChangeText={setCost} keyboardType="decimal-pad" placeholder="0,00" />
-          <Field label="Valeur actuelle" value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="0,00"
+          <Field label={`Montant versé (${sym})`} value={cost} onChangeText={setCost} keyboardType="decimal-pad" placeholder="0,00" />
+          <Field label={`Valeur actuelle (${sym})`} value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="0,00"
             hint="À mettre à jour de temps en temps (relevé annuel, espace client)." />
         </>
       ) : (
         <>
           <Field label="Quantité" value={qty} onChangeText={setQty} keyboardType="decimal-pad" placeholder="Nombre de titres ou de parts" />
-          <Field label="Prix de revient unitaire (PRU) en €" value={cost} onChangeText={setCost} keyboardType="decimal-pad"
-            placeholder="0,00" hint="Affiché par ton courtier (PRU, prix moyen d’achat)." />
+          <Field label={`Prix de revient unitaire (PRU) en ${sym}`} value={cost} onChangeText={setCost} keyboardType="decimal-pad"
+            placeholder="0,00"
+            hint={currency === 'EUR'
+              ? 'Affiché par ton courtier (PRU, prix moyen d’achat). En €, la plus-value inclut l’effet de change.'
+              : 'En $, la plus-value est calculée au taux du jour (hors effet de change).'} />
           {mode === 'unlisted' && (
-            <Field label="Valeur actuelle d’une part" value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="0,00" />
+            <Field label={`Valeur actuelle d’une part (${sym})`} value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder="0,00" />
           )}
         </>
       )}
@@ -184,7 +199,11 @@ function EditForm({ p }: { p: PositionRow }) {
   const [qty, setQty] = useState(fmt(p.quantity));
   const [cost, setCost] = useState(fmt(p.avg_cost));
   const [price, setPrice] = useState(fmt(p.last_price));
+  const [currency, setCurrency] = useState<string>(p.cost_currency);
   const [busy, setBusy] = useState(false);
+  const sym = currencySymbol(currency);
+  // Titre manuel : la valeur est dans la même devise que les montants saisis.
+  const priceSym = manual ? sym : currencySymbol(p.instrument_currency);
 
   const nQty = valueLine ? 1 : parseAmount(qty);
   const nCost = parseAmount(cost);
@@ -194,8 +213,11 @@ function EditForm({ p }: { p: PositionRow }) {
   async function save() {
     setBusy(true);
     try {
-      await savePosition({ id: p.id, account_id: p.account_id, instrument_id: p.instrument_id, quantity: nQty!, avg_cost: nCost!, cost_currency: p.cost_currency });
-      if (editPrice && nPrice != null && nPrice !== p.last_price) await setManualPrice(p.instrument_id, nPrice);
+      await savePosition({ id: p.id, account_id: p.account_id, instrument_id: p.instrument_id, quantity: nQty!, avg_cost: nCost!, cost_currency: currency });
+      const currencyChanged = manual && currency !== p.instrument_currency;
+      if (editPrice && nPrice != null && (nPrice !== p.last_price || currencyChanged)) {
+        await setManualPrice(p.instrument_id, nPrice, manual ? currency : undefined);
+      }
       router.back();
     } catch (e) {
       Alert.alert('Position', errMsg(e));
@@ -227,18 +249,19 @@ function EditForm({ p }: { p: PositionRow }) {
         {[p.isin, p.source_symbol?.startsWith('manual:') ? null : p.source_symbol].filter(Boolean).join(' · ')}
         {!manual && p.last_price != null ? `  ·  cours ${money(p.last_price, p.instrument_currency)}` : ''}
       </Text>
+      <CurrencyPicker value={currency} onChange={setCurrency} label={manual ? 'Devise des montants' : 'Devise du PRU'} />
       {valueLine ? (
         <>
-          <Field label="Montant versé" value={cost} onChangeText={setCost} keyboardType="decimal-pad" />
-          <Field label="Valeur actuelle" value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
+          <Field label={`Montant versé (${sym})`} value={cost} onChangeText={setCost} keyboardType="decimal-pad" />
+          <Field label={`Valeur actuelle (${sym})`} value={price} onChangeText={setPrice} keyboardType="decimal-pad" />
         </>
       ) : (
         <>
           <Field label="Quantité" value={qty} onChangeText={setQty} keyboardType="decimal-pad" />
-          <Field label={`PRU (${p.cost_currency})`} value={cost} onChangeText={setCost} keyboardType="decimal-pad" />
+          <Field label={`PRU (${sym})`} value={cost} onChangeText={setCost} keyboardType="decimal-pad" />
           {editPrice && (
             <Field
-              label="Valeur actuelle d’une part" value={price} onChangeText={setPrice} keyboardType="decimal-pad"
+              label={`Valeur actuelle d’une part (${priceSym})`} value={price} onChangeText={setPrice} keyboardType="decimal-pad"
               hint={manual ? undefined : 'Cours introuvable automatiquement : saisis-le à la main.'}
             />
           )}

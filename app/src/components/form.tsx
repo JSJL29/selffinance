@@ -40,6 +40,38 @@ export function PrimaryButton({ label, onPress, disabled, busy }: {
   );
 }
 
+export const CURRENCIES = [
+  { value: 'EUR', label: '€ Euro' },
+  { value: 'USD', label: '$ Dollar' },
+] as const;
+export type Currency = (typeof CURRENCIES)[number]['value'];
+
+/** Choix de la devise d'un montant saisi à la main. */
+export function CurrencyPicker({ value, onChange, label = 'Devise' }: {
+  value: string; onChange: (c: Currency) => void; label?: string;
+}) {
+  const t = useTheme();
+  return (
+    <View style={s.field}>
+      <Text style={[s.label, { color: t.muted }]}>{label}</Text>
+      <View style={s.row}>
+        {CURRENCIES.map((c) => {
+          const on = value === c.value;
+          return (
+            <Pressable
+              key={c.value} onPress={() => onChange(c.value)}
+              style={[s.choice, { borderColor: on ? t.primary : t.border, backgroundColor: on ? t.primary : 'transparent' }]}>
+              <Text style={{ color: on ? t.primaryText : t.text, fontWeight: on ? '600' : '400' }}>{c.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+export const currencySymbol = (c: string) => (c === 'USD' ? '$' : c === 'EUR' ? '€' : c);
+
 export function DangerLink({ label, onPress }: { label: string; onPress: () => void }) {
   const t = useTheme();
   return <Text onPress={onPress} style={[s.danger, { color: t.danger }]}>{label}</Text>;
@@ -54,4 +86,6 @@ const s = StyleSheet.create({
   button: { borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
   buttonText: { fontSize: 16, fontWeight: '600' },
   danger: { textAlign: 'center', padding: 16, fontSize: 14, fontWeight: '600' },
+  row: { flexDirection: 'row', gap: 8 },
+  choice: { flex: 1, alignItems: 'center', borderWidth: 1, borderRadius: 12, paddingVertical: 10 },
 });

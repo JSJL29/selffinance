@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { router } from 'expo-router';
 import { connectBank } from '@/lib/data';
-import { showAlert } from '@/lib/dialog';
 
 /**
- * Connecte ou reconnecte une banque et affiche le résultat.
- * `onDone` est appelé après une connexion réussie (pour recharger les données).
+ * Connecte ou reconnecte une banque, puis affiche l'écran de résultat (/bank-connected).
+ * Le retour de la banque peut déjà avoir ouvert cet écran : `navigate` le réutilise au lieu
+ * d'en empiler un second. Abandon par l'utilisateur : on reste où l'on est.
  */
 export function useConnectBank(onDone?: () => void | Promise<void>) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -13,18 +14,15 @@ export function useConnectBank(onDone?: () => void | Promise<void>) {
     setBusy(bank);
     try {
       const r = await connectBank(bank);
-      if (r.status === 'ok') {
-        await onDone?.();
-        showAlert(
-          `${bank} connectée`,
-          r.newAccounts > 0
-            ? `${r.newAccounts} nouveau${r.newAccounts > 1 ? 'x' : ''} compte${r.newAccounts > 1 ? 's' : ''}. L'historique arrive dans une minute.`
-            : 'Connexion renouvelée, la synchro reprend normalement.',
-        );
-        return true;
-      }
-      if (r.status === 'error') showAlert('Connexion à ' + bank, r.message);
-      return false;
+      if (r.status === 'cancel') return false;
+      if (r.status === 'ok') await onDone?.();
+      router.navigate({
+        pathname: '/bank-connected',
+        params: r.status === 'ok'
+          ? { status: 'ok', bank, accounts: String(r.accounts), new: String(r.newAccounts) }
+          : { status: 'error', bank, message: r.message },
+      });
+      return r.status === 'ok';
     } finally {
       setBusy(null);
     }

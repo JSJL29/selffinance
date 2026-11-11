@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Aspsp, fetchAccounts, fetchAspsps, useLoad } from '@/lib/data';
 import { useTheme } from '@/lib/theme';
@@ -36,9 +35,8 @@ export default function AddBank() {
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Continuer',
-          onPress: async () => {
-            if (await connect(a.name)) router.navigate('/');
-          },
+          // Le résultat s'affiche sur l'écran /bank-connected (voir useConnectBank).
+          onPress: () => { connect(a.name); },
         },
       ],
     );

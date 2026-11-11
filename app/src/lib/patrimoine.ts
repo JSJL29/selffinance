@@ -250,3 +250,136 @@ export async function deletePosition(id: string) {
   const { error } = await supabase.from('positions').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ---------- Opérations (ventes, dividendes) et bilan fiscal ----------
+
+export type OperationKind = 'sell' | 'dividend' | 'withholding';
+
+export type Operation = {
+  id: string;
+  account_id: string;
+  instrument_id: string | null;
+  kind: OperationKind;
+  date: string;
+  quantity: number | null;
+  price: number | null;
+  fees: number;
+  amount: number | null;
+  tax_withheld: number;
+  currency: string;
+  avg_cost: number | null;
+  realized: number | null;
+  fx_per_eur: number;
+  cash_credit: number;
+  source: 'manual' | 'ibkr';
+  note: string | null;
+  instrument_name: string | null;
+  account_name: string;
+  envelope: Envelope;
+  realized_eur: number | null;
+  amount_eur: number | null;
+};
+
+export type TaxSummary = {
+  year: number;
+  pfu_rate: number;
+  cto_gains: number;
+  cto_losses: number;
+  cto_net: number;
+  carried_losses: number;
+  taxable: number;
+  loss_to_carry: number;
+  cto_dividends: number;
+  foreign_withholding: number;
+  already_withheld: number;
+  estimated_tax: number;
+  remaining: number;
+  pea_realized: number;
+  pea_dividends: number;
+};
+
+const OPERATION_NUMS = ['quantity', 'price', 'fees', 'amount', 'tax_withheld', 'avg_cost', 'realized',
+  'fx_per_eur', 'cash_credit', 'realized_eur', 'amount_eur'];
+const TAX_NUMS = ['pfu_rate', 'cto_gains', 'cto_losses', 'cto_net', 'carried_losses', 'taxable', 'loss_to_carry',
+  'cto_dividends', 'foreign_withholding', 'already_withheld', 'estimated_tax', 'remaining', 'pea_realized', 'pea_dividends'];
+
+export async function fetchOperations(accountId: string): Promise<Operation[]> {
+  const { data, error } = await supabase.from('operation_view').select('*')
+    .eq('account_id', accountId).order('date', { ascending: false }).order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => nums<Operation>(r, OPERATION_NUMS));
+}
+
+/** Vend tout ou partie d'une position manuelle (positions et liquidités mises à jour côté serveur). */
+export async function sellPosition(positionId: string, s: { quantity: number; price: number; fees: number; date: string }) {
+  const { error } = await supabase.rpc('sell_position', {
+    p_position: positionId, p_quantity: s.quantity, p_price: s.price, p_fees: s.fees, p_date: s.date,
+  });
+  if (error) throw error;
+}
+
+export async function addDividend(d: {
+  account_id: string; instrument_id: string | null; date: string; amount: number; tax_withheld: number;
+  currency: string; note?: string;
+}) {
+  const { error } = await supabase.rpc('add_dividend', {
+    p_account: d.account_id, p_instrument: d.instrument_id, p_date: d.date, p_amount: d.amount,
+    p_tax_withheld: d.tax_withheld, p_currency: d.currency, p_note: d.note ?? null,
+  });
+  if (error) throw error;
+}
+
+/** Supprime une opération manuelle (une vente rend les titres ; les liquidités sont reprises). */
+export async function deleteOperation(id: string) {
+  const { error } = await supabase.rpc('delete_operation', { p_op: id });
+  if (error) throw error;
+}
+
+export async function fetchTaxSummary(year: number): Promise<TaxSummary> {
+  const { data, error } = await supabase.rpc('tax_summary', { p_year: year }).single();
+  if (error) throw error;
+  return nums<TaxSummary>(data as Record<string, unknown>, TAX_NUMS);
+}
+
+export type RealizedByAccount = {
+  account_id: string; account_name: string; envelope: Envelope; realized_eur: number; dividends_eur: number;
+};
+
+/** Plus-values réalisées et dividendes de l'année, compte par compte (EUR). */
+export async function fetchRealizedByAccount(year: number): Promise<RealizedByAccount[]> {
+  const { data, error } = await supabase.from('operation_view')
+    .select('account_id, account_name, envelope, kind, realized_eur, amount_eur')
+    .gte('date', `${year}-01-01`).lte('date', `${year}-12-31`);
+  if (error) throw error;
+  const by = new Map<string, RealizedByAccount>();
+  for (const r of data ?? []) {
+    const a = by.get(r.account_id) ?? {
+      account_id: r.account_id, account_name: r.account_name, envelope: r.envelope as Envelope,
+      realized_eur: 0, dividends_eur: 0,
+    };
+    if (r.kind === 'sell') a.realized_eur += Number(r.realized_eur ?? 0);
+    if (r.kind === 'dividend') a.dividends_eur += Number(r.amount_eur ?? 0);
+    by.set(r.account_id, a);
+  }
+  return [...by.values()].sort((x, y) => x.account_name.localeCompare(y.account_name, 'fr'));
+}
+
+/** Années ayant au moins une opération, plus l'année en cours (la plus récente d'abord). */
+export async function fetchOperationYears(): Promise<number[]> {
+  const { data, error } = await supabase.from('operations').select('date').order('date', { ascending: true }).limit(1);
+  if (error) throw error;
+  const now = new Date().getFullYear();
+  const first = data?.[0] ? Number(String(data[0].date).slice(0, 4)) : now;
+  return Array.from({ length: now - Math.min(first, now) + 1 }, (_, i) => now - i);
+}
+
+export async function fetchTaxSettings(year: number): Promise<{ pfu_rate: number; carried_losses: number }> {
+  const { data, error } = await supabase.from('tax_settings').select('pfu_rate, carried_losses').eq('year', year).maybeSingle();
+  if (error) throw error;
+  return { pfu_rate: Number(data?.pfu_rate ?? 0.314), carried_losses: Number(data?.carried_losses ?? 0) };
+}
+
+export async function saveTaxSettings(year: number, s: { pfu_rate: number; carried_losses: number }) {
+  const { error } = await supabase.from('tax_settings').upsert({ year, ...s });
+  if (error) throw error;
+}

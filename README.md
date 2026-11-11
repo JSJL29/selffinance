@@ -35,10 +35,10 @@ Les virements entre mes propres comptes (SG → IBKR, SG → Revolut…) sont d�
 | BNP Paribas | Open Banking (Enable Banking) | ✅ Connectée |
 | Fortuneo | Open Banking (Enable Banking) | 🟡 Disponible, à connecter |
 | Trade Republic (espèces) | Open Banking (Enable Banking) | 🟡 Disponible, à connecter (sans libellés) |
-| IBKR | API officielle (Flex Web Service) | 🔜 Prévu |
-| PEA / CTO Fortuneo, Trade Republic, Revolut | Saisie des positions + cours automatiques | 🔜 Prévu |
-| Natixis Interépargne | Saisie des parts + VL (base AMF) | 🔜 Prévu |
-| Livret A, poches Revolut | Saisie manuelle | 🔜 Prévu |
+| IBKR | Saisie des positions pour l'instant, puis API officielle (Flex Web Service) | 🟡 Saisie manuelle |
+| PEA / CTO Fortuneo, Trade Republic, Revolut | Saisie des positions + cours automatiques (Yahoo Finance) | ✅ Onglet Patrimoine |
+| Natixis Interépargne | Saisie des parts + valeur de part (manuelle, AMF non automatisable pour l'instant) | ✅ Onglet Patrimoine |
+| Livret A, poches Revolut, assurance-vie (fonds euros) | Saisie manuelle | ✅ Onglet Patrimoine |
 
 > L'Open Banking (DSP2) ne couvre que les **comptes de paiement**. L'épargne et l'investissement passent donc par d'autres moyens. Tous les détails sont dans [`docs/open-banking.md`](docs/open-banking.md).
 
@@ -76,12 +76,13 @@ Après la connexion à la banque, le navigateur affiche une erreur `localhost` :
 - [x] Valider l'Open Banking en sandbox
 - [x] App Enable Banking en production + SG, Revolut, BNP connectées
 - [ ] Connecter Fortuneo et Trade Republic
-- [ ] Choisir la stack de l'app (Expo ou web app) + backend (Supabase)
-- [ ] Synchro automatique côté serveur
-- [ ] Écrans : comptes, détail, transactions globales
-- [ ] Détection des virements internes
+- [x] Choisir la stack de l'app (Expo ou web app) + backend (Supabase)
+- [x] Synchro automatique côté serveur (heures réglables, bouton manuel)
+- [x] Écrans : comptes, détail, transactions globales
+- [x] Détection des virements internes
 - [ ] IBKR via le Flex Web Service
-- [ ] Saisie manuelle : PEA/CTO, Natixis, Livret A
+- [x] Patrimoine : comptes manuels, positions, cours, plus-values
+- [ ] Historique des opérations (achats, ventes, dividendes)
 - [ ] Catégorisation des dépenses, abonnements, budgets
 
 ## 📁 Structure

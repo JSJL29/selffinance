@@ -119,3 +119,5 @@ Sources :
 
 - **Livret A** : pas récupéré par l'Open Banking. Les comptes d'épargne ne sont pas couverts par la DSP2 et la session SG ne contient que le compte courant. Décision : saisie manuelle du solde.
 - **« BQ CHAS CPT 31412815 »** sur les relevés SG : c'est le **compte IBKR** (dépôts reçus via J.P. Morgan Chase, code banque CHAS). Ce sont des virements internes vers IBKR, pas des dépenses. Le compte sera suivi via le Flex Web Service.
+
+- **11/11/2026 : implémenté** dans l'onglet Patrimoine de l'app (comptes manuels, positions, cours Yahoo Finance, plus-values). Voir `docs/superpowers/specs/2026-11-11-patrimoine-design.md`.

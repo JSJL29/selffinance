@@ -107,6 +107,7 @@ L'Open Banking (DSP2) ne couvre que les comptes de paiement. Les PEA, CTO, assur
   3. auprès de la société de gestion (ex. im.natixis.com).
 - **Limite :** les fonds **dédiés** et professionnels, comme ceux d'actionnariat salarié propres à une entreprise, ne sont pas publiés par l'AMF. Il faudra les saisir à la main, environ une fois par mois.
 - À faire : relever le nom et le code AMF de chaque fonds sur le relevé, puis vérifier lesquels sont présents dans GECO / ROSA.
+- **11/11/2026 : pas d'automatisation pour l'instant.** GECO est une application web, sans fichier ni accès direct par fonds lisible par un serveur, et rien d'exploitable n'a été trouvé sur data.gouv. Dans l'app, les FCPE se saisissent donc à la main (cours manuel). La fonction `quotes` garde un fournisseur `amf` vide, prêt à être branché si une source est trouvée.
 
 Sources :
 - [IBKR Flex Web Service](https://www.interactivebrokers.com/campus/ibkr-api-page/flex-web-service)

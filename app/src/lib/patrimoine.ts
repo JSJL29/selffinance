@@ -109,6 +109,12 @@ export async function fetchPositions(accountId: string): Promise<PositionRow[]> 
   return (data ?? []).map((r) => nums<PositionRow>(r, POSITION_NUMS));
 }
 
+export async function fetchPosition(id: string): Promise<PositionRow | null> {
+  const { data, error } = await supabase.from('position_view').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? nums<PositionRow>(data, POSITION_NUMS) : null;
+}
+
 export type AccountInput = {
   id?: string;
   name: string;

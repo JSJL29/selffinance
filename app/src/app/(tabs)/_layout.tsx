@@ -18,6 +18,10 @@ export default function TabsLayout() {
         options={{ title: 'Comptes', tabBarIcon: ({ color, size }) => <Ionicons name="wallet-outline" color={color as string} size={size} /> }}
       />
       <Tabs.Screen
+        name="patrimoine"
+        options={{ title: 'Patrimoine', tabBarIcon: ({ color, size }) => <Ionicons name="pie-chart-outline" color={color as string} size={size} /> }}
+      />
+      <Tabs.Screen
         name="transactions"
         options={{ title: 'Transactions', tabBarIcon: ({ color, size }) => <Ionicons name="swap-vertical" color={color as string} size={size} /> }}
       />

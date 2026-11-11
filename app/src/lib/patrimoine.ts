@@ -37,6 +37,10 @@ export type ManualAccount = {
   cash_updated_at: string | null;
   hidden: boolean;
   sort_order: number;
+  /** Compte rempli automatiquement (positions et liquidités en lecture seule). */
+  sync_source: 'ibkr' | null;
+  last_synced_at: string | null;
+  sync_error: string | null;
   cash_eur: number | null;
   positions_value_eur: number;
   invested_eur: number;
@@ -152,6 +156,13 @@ export async function saveManualAccount(a: AccountInput): Promise<string> {
   const { data, error } = await q;
   if (error) throw error;
   return data.id as string;
+}
+
+/** Récupère positions et liquidités du compte IBKR (Flex Web Service). Prend jusqu'à ~1 min. */
+export async function syncIbkr(): Promise<{ date: string; positions: number; cash_eur: number }> {
+  const { data, error } = await supabase.functions.invoke('ibkr/sync', { body: {} });
+  if (error) throw new Error(await functionError(error));
+  return data;
 }
 
 export async function deleteManualAccount(id: string) {

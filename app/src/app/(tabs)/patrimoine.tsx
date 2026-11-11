@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchAccounts, useLoad } from '@/lib/data';
-import { ManualAccount, envelopeLabel, fetchManualAccounts } from '@/lib/patrimoine';
+import { ManualAccount, envelopeLabel, fetchManualAccounts, syncIbkr } from '@/lib/patrimoine';
 import { netWorth } from '@/lib/networth';
 import { money, pct } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
@@ -69,6 +69,10 @@ export default function Patrimoine() {
           </Text>
         )}
 
+        {manual.data && !manual.data.some((m) => m.sync_source === 'ibkr') && (
+          <ConnectIbkr onDone={manual.reload} />
+        )}
+
         <Pressable
           onPress={() => router.push('/patrimoine/account-edit')}
           style={({ pressed }) => [s.add, { borderColor: t.border, backgroundColor: pressed ? t.border : 'transparent' }]}>
@@ -77,6 +81,34 @@ export default function Patrimoine() {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/** Première synchro IBKR : crée le compte « CTO IBKR » et le remplit. */
+function ConnectIbkr({ onDone }: { onDone: () => Promise<void> }) {
+  const t = useTheme();
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    try {
+      const r = await syncIbkr();
+      Alert.alert('IBKR connecté', `${r.positions} position${r.positions > 1 ? 's' : ''} récupérée${r.positions > 1 ? 's' : ''}.`);
+    } catch (e) {
+      Alert.alert('IBKR', e instanceof Error ? e.message : String(e));
+    } finally {
+      await onDone();
+      setBusy(false);
+    }
+  }
+  return (
+    <Pressable
+      onPress={run} disabled={busy}
+      style={({ pressed }) => [s.add, { borderColor: t.border, backgroundColor: pressed ? t.border : 'transparent' }]}>
+      {busy ? <ActivityIndicator color={t.primary} /> : <Ionicons name="sync" size={18} color={t.primary} />}
+      <Text style={{ color: t.primary, fontSize: 15, fontWeight: '600' }}>
+        {busy ? 'Récupération du relevé IBKR…' : 'Connecter IBKR (synchro automatique)'}
+      </Text>
+    </Pressable>
   );
 }
 

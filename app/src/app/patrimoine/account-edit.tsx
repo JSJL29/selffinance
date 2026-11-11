@@ -96,11 +96,11 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
 
           <Field label="Établissement" value={institution} onChangeText={setInstitution} placeholder="Fortuneo, Boursorama, Natixis…" />
           <Field label="Nom" value={name} onChangeText={setName} placeholder={finalName || 'Ex. PEA Fortuneo'} />
-          <Field
+          {!account?.sync_source && <Field
             label={kind === 'savings' ? 'Solde' : 'Liquidités'}
             hint={kind === 'savings' ? undefined : 'Argent non investi sur le compte. Les titres s’ajoutent ensuite.'}
             value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="0,00"
-          />
+          />}
           {amount == null && <Text style={{ color: t.danger }}>Montant invalide.</Text>}
 
           <PrimaryButton label={account ? 'Enregistrer' : 'Créer le compte'} onPress={save} disabled={!valid} busy={busy} />

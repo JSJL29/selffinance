@@ -112,6 +112,17 @@ Onglet Patrimoine                     Compte d'investissement
 - **Cours manuel** : sur un titre `manual`, ou dont le cours est introuvable, on saisit le cours et sa date.
 - Suppression d'une position ou d'un compte, avec confirmation.
 
+## IBKR automatique (Flex Web Service), validé le 11/11/2026
+
+- Un compte manuel peut être **synchronisé** (`manual_accounts.sync_source = 'ibkr'`). Ses positions et ses liquidités sont **en lecture seule** dans l'app : c'est IBKR qui fait foi.
+- **Fonction Edge `ibkr`** : `POST /ibkr/sync`, appelée par le cron (secret Vault) ou par l'app (JWT, bouton « Synchroniser IBKR »). Elle appelle `SendRequest` (jeton + ID de requête) puis `GetStatement`, en réessayant tant que le relevé est en cours de génération. Ensuite elle lit le XML :
+  - `OpenPosition` (niveau SUMMARY) donne les titres (`price_source = 'ibkr'`, `source_symbol = 'ibkr:<conid>'`, cours = `markPrice`). Les positions du compte sont remplacées, avec quantité = `position`, PRU = `costBasisPrice` et `cost_currency` = devise du titre (plus-value « hors effet de change » pour les titres hors EUR).
+  - `CashReportCurrency` donne les liquidités, converties en EUR avec `fx_rates` et stockées en EUR.
+  - Le compte « CTO IBKR » est créé s'il n'existe pas.
+- **Secrets** : le jeton est stocké comme secret de fonction `IBKR_FLEX_TOKEN` (saisi par le propriétaire dans le dashboard) ; l'ID de requête est dans Vault (`ibkr_query_id`).
+- **Cron** : tous les jours à 7 h (heure de Paris), après la clôture de la veille. Ne passe ni par Enable Banking ni par `sync_runs`.
+- Hors périmètre : historique des opérations IBKR (viendra avec l'historique général).
+
 ## Évolutions prévues (à ne pas bloquer)
 
 - **Historique des opérations** : table `operations` (compte, titre, date, type achat/vente/dividende/versement, quantité, prix, frais). Les positions pourront alors être recalculées à partir des opérations, ou rester saisies pour les comptes sans historique.

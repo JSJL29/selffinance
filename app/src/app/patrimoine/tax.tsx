@@ -125,7 +125,8 @@ function Settings({ year, onSaved }: { year: number; onSaved: () => Promise<void
     setBusy(true);
     try {
       await saveTaxSettings(year, { pfu_rate: nRate! / 100, carried_losses: nLosses! });
-      await onSaved();
+      // Relire les réglages enregistrés, sinon les champs réafficheraient l'ancienne valeur.
+      await Promise.all([current.reload(), onSaved()]);
       setRate(null);
       setLosses(null);
     } catch (e) {

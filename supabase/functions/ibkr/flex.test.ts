@@ -20,12 +20,16 @@ const STATEMENT = `<?xml version="1.0" encoding="UTF-8"?>
 </CashReport>
 <Trades>
 <Trade accountId="U1234567" currency="USD" fxRateToBase="0.9" assetCategory="STK" symbol="AAPL" conid="265598" tradeID="110" tradeDate="20261104" quantity="3" tradePrice="290" ibCommission="-1" fifoPnlRealized="0" buySell="BUY" levelOfDetail="EXECUTION" />
-<Trade accountId="U1234567" currency="USD" fxRateToBase="0.9" assetCategory="STK" symbol="AAPL" conid="265598" tradeID="111" tradeDate="20261105" quantity="-2" tradePrice="300" ibCommission="-1" fifoPnlRealized="24.5" buySell="SELL" levelOfDetail="EXECUTION" />
+<Trade accountId="U1234567" currency="USD" fxRateToBase="0.9" assetCategory="STK" symbol="AAPL" description="APPLE INC" isin="US0378331005" conid="265598" tradeID="111" tradeDate="20261105" quantity="-2" tradePrice="300" ibCommission="-1" fifoPnlRealized="24.5" buySell="SELL" levelOfDetail="EXECUTION" />
+<Trade accountId="U1234567" currency="USD" fxRateToBase="0.92" assetCategory="CASH" symbol="EUR.USD" conid="12087792" tradeID="112" tradeDate="20261105" quantity="-1000" tradePrice="1.08" ibCommission="-2" fifoPnlRealized="0" buySell="SELL" levelOfDetail="EXECUTION" />
+<Trade accountId="U1234567" currency="USD" fxRateToBase="0.92" assetCategory="OPT" symbol="AAPL 261218C00300000" conid="999" tradeID="113" tradeDate="20261105" quantity="-1" tradePrice="5" ibCommission="-1" fifoPnlRealized="400" buySell="SELL" levelOfDetail="EXECUTION" />
+<Trade accountId="U1234567" currency="USD" fxRateToBase="0.92" assetCategory="STK" symbol="MSFT" conid="272093" tradeID="114" tradeDate="" quantity="-1" tradePrice="500" ibCommission="-1" fifoPnlRealized="10" buySell="SELL" levelOfDetail="EXECUTION" />
 </Trades>
 <CashTransactions>
 <CashTransaction accountId="U1234567" currency="USD" fxRateToBase="0.9" conid="265598" type="Dividends" amount="3.2" dateTime="20261106" description="AAPL CASH DIVIDEND" transactionID="222" />
 <CashTransaction accountId="U1234567" currency="USD" fxRateToBase="0.9" conid="265598" type="Withholding Tax" amount="-0.48" dateTime="20261106;202000" description="AAPL US TAX" transactionID="223" />
 <CashTransaction accountId="U1234567" currency="EUR" fxRateToBase="1" conid="" type="Deposits/Withdrawals" amount="500" dateTime="20261101" description="DEPOT" transactionID="224" />
+<CashTransaction accountId="U1234567" currency="USD" conid="272093" type="Dividends" amount="1.5" dateTime="" settleDate="20261107" description="MSFT CASH DIVIDEND" transactionID="225" />
 </CashTransactions>
 </FlexStatement>
 </FlexStatements>
@@ -73,15 +77,26 @@ test('parseFlexResponse : relevé en cours de génération (1019)', () => {
   assert.match(r.errorMessage!, /in progress/);
 });
 
-test('parseStatement lit les ventes (SELL) avec la plus-value IBKR, ignore les achats', () => {
+test('parseStatement lit les ventes de titres (SELL) avec la plus-value IBKR et de quoi nommer le titre', () => {
   assert.deepEqual(parseStatement(STATEMENT).trades, [
-    { id: '111', conid: '265598', date: '2026-11-05', quantity: 2, price: 300, commission: 1,
-      currency: 'USD', fxRateToBase: 0.9, realized: 24.5 },
+    { id: '111', conid: '265598', symbol: 'AAPL', name: 'APPLE INC', isin: 'US0378331005', type: 'stock',
+      date: '2026-11-05', quantity: 2, price: 300, commission: 1, currency: 'USD', fxRateToBase: 0.9, realized: 24.5 },
   ]);
 });
 
+test('parseStatement ignore achats, conversions de devises (CASH), dérivés et lignes sans date', () => {
+  const ids = parseStatement(STATEMENT).trades.map((t) => t.id);
+  assert.deepEqual(ids, ['111']); // 110 achat, 112 change, 113 option, 114 sans date
+});
+
+test('parseStatement : date de repli (settleDate) et taux de change absent = null', () => {
+  const msft = parseStatement(STATEMENT).cashTx.find((c) => c.id === '225');
+  assert.equal(msft?.date, '2026-11-07');
+  assert.equal(msft?.fxRateToBase, null);
+});
+
 test('parseStatement lit dividendes et retenues à la source, ignore les autres mouvements', () => {
-  assert.deepEqual(parseStatement(STATEMENT).cashTx, [
+  assert.deepEqual(parseStatement(STATEMENT).cashTx.filter((c) => c.id !== '225'), [
     { id: '222', conid: '265598', type: 'dividend', date: '2026-11-06', amount: 3.2, currency: 'USD',
       fxRateToBase: 0.9, description: 'AAPL CASH DIVIDEND' },
     { id: '223', conid: '265598', type: 'withholding', date: '2026-11-06', amount: -0.48, currency: 'USD',

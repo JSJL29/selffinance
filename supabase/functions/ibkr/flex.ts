@@ -15,12 +15,16 @@ export type FlexPosition = {
 export type FlexTrade = {
   id: string;
   conid: string;
+  symbol: string;
+  name: string;
+  isin: string | null;
+  type: FlexPosition['type'];
   date: string;
   quantity: number;     // quantité vendue (positive)
   price: number;
   commission: number;   // frais (positifs)
   currency: string;
-  fxRateToBase: number;
+  fxRateToBase: number | null;   // null si absent du relevé (taux à prendre ailleurs)
   realized: number;     // plus-value réalisée calculée par IBKR (FIFO), dans `currency`
 };
 export type FlexCashTx = {
@@ -30,7 +34,7 @@ export type FlexCashTx = {
   date: string;
   amount: number;
   currency: string;
-  fxRateToBase: number;
+  fxRateToBase: number | null;
   description: string;
 };
 export type FlexStatement = {
@@ -105,18 +109,24 @@ export function parseStatement(xml: string): FlexStatement {
     .filter((c) => c.currency && c.currency !== 'BASE_SUMMARY' && Number.isFinite(num(c.endingCash)))
     .map((c) => ({ currency: c.currency, amount: num(c.endingCash) }));
 
-  // Ventes uniquement (les achats ne sont pas importés), niveau exécution.
+  // Ventes de titres uniquement (pas les achats, ni les conversions de devises « CASH », ni les dérivés),
+  // niveau exécution ; une ligne sans date est ignorée plutôt que de bloquer toute la synchro.
   const trades = elements(xml, 'Trade')
-    .filter((t) => t.buySell === 'SELL' && (t.levelOfDetail ?? 'EXECUTION') === 'EXECUTION' && t.tradeID)
+    .filter((t) => t.buySell === 'SELL' && (t.levelOfDetail ?? 'EXECUTION') === 'EXECUTION' && t.tradeID
+      && TYPES[t.assetCategory ?? ''] && isoDate(t.tradeDate))
     .map((t): FlexTrade => ({
       id: t.tradeID,
       conid: t.conid ?? '',
-      date: isoDate(t.tradeDate) ?? '',
+      symbol: t.symbol ?? '',
+      name: t.description || t.symbol || '',
+      isin: t.isin || null,
+      type: TYPES[t.assetCategory ?? ''] ?? 'other',
+      date: isoDate(t.tradeDate)!,
       quantity: Math.abs(num(t.quantity)),
       price: num(t.tradePrice),
       commission: Math.abs(num(t.ibCommission) || 0),
       currency: t.currency || 'USD',
-      fxRateToBase: num(t.fxRateToBase) || 1,
+      fxRateToBase: rate(t.fxRateToBase),
       realized: num(t.fifoPnlRealized) || 0,
     }));
 
@@ -125,20 +135,27 @@ export function parseStatement(xml: string): FlexStatement {
     'Payment In Lieu Of Dividends': 'dividend',
     'Withholding Tax': 'withholding',
   };
+  const cashDate = (c: Record<string, string>) => isoDate(c.dateTime) ?? isoDate(c.settleDate) ?? isoDate(c.reportDate);
   const cashTx = elements(xml, 'CashTransaction')
-    .filter((c) => CASH_TYPES[c.type ?? ''] && c.transactionID)
+    .filter((c) => CASH_TYPES[c.type ?? ''] && c.transactionID && cashDate(c) && Number.isFinite(num(c.amount)))
     .map((c): FlexCashTx => ({
       id: c.transactionID,
       conid: c.conid || null,
       type: CASH_TYPES[c.type],
-      date: isoDate(c.dateTime ?? c.settleDate) ?? '',
+      date: cashDate(c)!,
       amount: num(c.amount),
       currency: c.currency || 'USD',
-      fxRateToBase: num(c.fxRateToBase) || 1,
+      fxRateToBase: rate(c.fxRateToBase),
       description: c.description ?? '',
     }));
 
   return { accountId: st.accountId ?? null, date: isoDate(st.toDate), positions, cash, trades, cashTx };
+}
+
+/** Taux vers la devise de base ; null s'il est absent ou invalide (jamais 1 par défaut). */
+function rate(s: string | undefined): number | null {
+  const n = num(s);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /** « 20261105 » ou « 20261105;202000 » → « 2026-11-05 ». */

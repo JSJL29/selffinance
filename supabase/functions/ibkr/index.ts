@@ -123,27 +123,43 @@ async function sync() {
 
     // Ventes et dividendes (idempotent : une opération IBKR déjà vue n'est pas recréée).
     // Les liquidités IBKR viennent du relevé : cash_credit reste à 0.
+    const { data: fx } = await db.from("fx_rates").select("currency, per_eur");
+    const rate = new Map((fx ?? []).map((r: { currency: string; per_eur: number }) => [r.currency, Number(r.per_eur)]));
+    // 1 EUR = x devise : taux du relevé (devise de base EUR), sinon taux du jour de la base.
+    const fxPerEur = (currency: string, toBase: number | null) =>
+      toBase ? 1 / toBase : currency === "EUR" ? 1 : rate.get(currency) ?? null;
     const instrumentFor = (conid: string | null) => (conid ? ids.get(`ibkr:${conid}`) ?? null : null);
     if (st.trades.length || st.cashTx.length) {
-      // Titres vendus en totalité : absents des positions, on les retrouve par leur conid.
-      const missing = [...new Set([...st.trades.map((t) => t.conid), ...st.cashTx.map((c) => c.conid ?? '')])]
+      // Titres vendus en totalité : absents des positions, on les retrouve par leur conid…
+      const missing = [...new Set([...st.trades.map((t) => t.conid), ...st.cashTx.map((c) => c.conid ?? "")])]
         .filter((c) => c && !ids.has(`ibkr:${c}`)).map((c) => `ibkr:${c}`);
       if (missing.length) {
         const { data: more } = await db.from("instruments").select("id, source_symbol").in("source_symbol", missing);
         for (const m of more ?? []) ids.set(m.source_symbol, m.id);
       }
+      // …ou on les crée à partir des infos de la vente (titre jamais vu en position).
+      for (const t of st.trades) {
+        const key = `ibkr:${t.conid}`;
+        if (!t.conid || ids.has(key)) continue;
+        const { data, error } = await db.from("instruments").insert({
+          name: t.name || t.symbol, isin: t.isin, type: t.type, currency: t.currency, price_source: "ibkr", source_symbol: key,
+        }).select("id").single();
+        if (error) throw new Error(`instruments: ${error.message}`);
+        ids.set(key, data.id);
+      }
       const ops = [
         ...st.trades.map((t) => ({
           account_id: accountId, instrument_id: instrumentFor(t.conid), kind: "sell", date: t.date,
           quantity: t.quantity, price: t.price, fees: t.commission, currency: t.currency,
-          realized: t.realized, fx_per_eur: 1 / t.fxRateToBase, source: "ibkr", external_id: `trade:${t.id}`,
+          realized: t.realized, fx_per_eur: fxPerEur(t.currency, t.fxRateToBase), source: "ibkr",
+          external_id: `trade:${t.id}`, note: t.symbol || null,
         })),
         ...st.cashTx.map((c) => ({
           account_id: accountId, instrument_id: instrumentFor(c.conid), kind: c.type, date: c.date,
-          amount: c.amount, currency: c.currency, fx_per_eur: 1 / c.fxRateToBase, source: "ibkr",
+          amount: c.amount, currency: c.currency, fx_per_eur: fxPerEur(c.currency, c.fxRateToBase), source: "ibkr",
           external_id: `cash:${c.id}`, note: c.description || null,
         })),
-      ];
+      ].filter((o) => o.fx_per_eur != null); // devise sans taux connu : ignorée plutôt que comptée comme de l'euro
       const { error } = await db.from("operations")
         // defaultToNull: false → colonnes absentes d'une ligne = valeurs par défaut (fees 0, cash_credit 0…)
         .upsert(ops, { onConflict: "source,external_id", ignoreDuplicates: true, defaultToNull: false });
@@ -151,8 +167,6 @@ async function sync() {
     }
 
     // Liquidités converties en EUR
-    const { data: fx } = await db.from("fx_rates").select("currency, per_eur");
-    const rate = new Map((fx ?? []).map((r: { currency: string; per_eur: number }) => [r.currency, Number(r.per_eur)]));
     const missing = st.cash.filter((c) => !rate.has(c.currency)).map((c) => c.currency);
     const cashEur = st.cash.reduce((s, c) => s + (rate.has(c.currency) ? c.amount / rate.get(c.currency)! : 0), 0);
 

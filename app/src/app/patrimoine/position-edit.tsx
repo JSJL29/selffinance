@@ -4,11 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLoad } from '@/lib/data';
 import {
-  PositionRow, SearchResult, deletePosition, fetchPosition, savePosition, searchInstruments, setManualPrice, upsertInstrument,
+  PositionRow, SearchResult, deletePosition, fetchPosition, findPosition, savePosition, searchInstruments, setManualPrice,
+  upsertInstrument,
 } from '@/lib/patrimoine';
+import { canEditPrice, mergePosition } from '@/lib/positions';
 import { money, parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
-import { Chip, Loading } from '@/components/ui';
+import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, DangerLink, Field, PrimaryButton } from '@/components/form';
 
 type Mode = 'quoted' | 'value' | 'unlisted';
@@ -25,10 +27,23 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String((e as { 
 export default function PositionEdit() {
   const { accountId, id } = useLocalSearchParams<{ accountId: string; id?: string }>();
   const existing = useLoad(() => (id ? fetchPosition(id) : Promise.resolve(null)), [id]);
-  if (id && !existing.data && !existing.error) return <Loading />;
-  return existing.data
-    ? <EditForm key={existing.data.id} p={existing.data} />
-    : <NewForm accountId={accountId} />;
+  if (!id) return <NewForm accountId={accountId} />;
+  if (existing.error) return <Screen title="Position"><ErrorBox message={existing.error} /></Screen>;
+  if (!existing.data) return <Loading />;
+  return <EditForm key={existing.data.id} p={existing.data} />;
+}
+
+/** Demande confirmation avant d'ajouter un achat à une position déjà détenue. */
+function confirmMerge(name: string, held: number, cur: string): Promise<boolean> {
+  return new Promise((resolve) => Alert.alert(
+    'Titre déjà détenu',
+    `Tu as déjà ${fmt(held)} × ${name} sur ce compte. Les quantités seront additionnées et le PRU recalculé (moyenne pondérée, ${cur}).`,
+    [
+      { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Additionner', onPress: () => resolve(true) },
+    ],
+    { cancelable: true, onDismiss: () => resolve(false) },
+  ));
 }
 
 // ---------- Nouvelle position ----------
@@ -78,12 +93,16 @@ function NewForm({ accountId }: { accountId: string }) {
       const instrumentId =
         mode === 'quoted' ? await upsertInstrument(picked!)
         : await upsertInstrument({ name, type: mode === 'value' ? 'fonds_euros' : 'fcpe', price: nPrice! });
-      await savePosition({
-        account_id: accountId,
-        instrument_id: instrumentId,
-        quantity: mode === 'value' ? 1 : nQty!,
-        avg_cost: nCost!,
-      });
+      const added = { quantity: mode === 'value' ? 1 : nQty!, avg_cost: nCost! };
+      // Titre déjà détenu sur ce compte : on additionne au lieu d'écraser.
+      const held = await findPosition(accountId, instrumentId);
+      if (held) {
+        if (!(await confirmMerge(picked?.name ?? name, held.quantity, held.cost_currency))) return;
+        await savePosition({ id: held.id, account_id: accountId, instrument_id: instrumentId,
+          cost_currency: held.cost_currency, ...mergePosition(held, added) });
+      } else {
+        await savePosition({ account_id: accountId, instrument_id: instrumentId, ...added });
+      }
       router.back();
     } catch (e) {
       Alert.alert('Position', errMsg(e));
@@ -161,6 +180,7 @@ function EditForm({ p }: { p: PositionRow }) {
   const t = useTheme();
   const valueLine = p.type === 'fonds_euros';
   const manual = p.price_source === 'manual';
+  const editPrice = canEditPrice(p); // titre manuel, ou titre coté dont le cours est introuvable
   const [qty, setQty] = useState(fmt(p.quantity));
   const [cost, setCost] = useState(fmt(p.avg_cost));
   const [price, setPrice] = useState(fmt(p.last_price));
@@ -175,7 +195,7 @@ function EditForm({ p }: { p: PositionRow }) {
     setBusy(true);
     try {
       await savePosition({ id: p.id, account_id: p.account_id, instrument_id: p.instrument_id, quantity: nQty!, avg_cost: nCost!, cost_currency: p.cost_currency });
-      if (manual && nPrice !== p.last_price) await setManualPrice(p.instrument_id, nPrice!);
+      if (editPrice && nPrice != null && nPrice !== p.last_price) await setManualPrice(p.instrument_id, nPrice);
       router.back();
     } catch (e) {
       Alert.alert('Position', errMsg(e));
@@ -187,7 +207,17 @@ function EditForm({ p }: { p: PositionRow }) {
   function remove() {
     Alert.alert(`Supprimer « ${p.instrument_name} » ?`, undefined, [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: async () => { await deletePosition(p.id); router.back(); } },
+      {
+        text: 'Supprimer', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePosition(p.id);
+            router.back();
+          } catch (e) {
+            Alert.alert('Position', errMsg(e));
+          }
+        },
+      },
     ]);
   }
 
@@ -206,7 +236,12 @@ function EditForm({ p }: { p: PositionRow }) {
         <>
           <Field label="Quantité" value={qty} onChangeText={setQty} keyboardType="decimal-pad" />
           <Field label={`PRU (${p.cost_currency})`} value={cost} onChangeText={setCost} keyboardType="decimal-pad" />
-          {manual && <Field label="Valeur actuelle d’une part" value={price} onChangeText={setPrice} keyboardType="decimal-pad" />}
+          {editPrice && (
+            <Field
+              label="Valeur actuelle d’une part" value={price} onChangeText={setPrice} keyboardType="decimal-pad"
+              hint={manual ? undefined : 'Cours introuvable automatiquement : saisis-le à la main.'}
+            />
+          )}
         </>
       )}
       <PrimaryButton label="Enregistrer" onPress={save} disabled={!valid} busy={busy} />

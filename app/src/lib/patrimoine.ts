@@ -96,10 +96,12 @@ export async function fetchManualAccounts(): Promise<ManualAccount[]> {
   return (data ?? []).map((r) => nums<ManualAccount>(r, ACCOUNT_NUMS));
 }
 
-export async function fetchManualAccount(id: string): Promise<ManualAccount | null> {
+/** Lève une erreur si le compte n'existe plus (supprimé) : les écrans affichent alors l'erreur. */
+export async function fetchManualAccount(id: string): Promise<ManualAccount> {
   const { data, error } = await supabase.from('manual_account_view').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
-  return data ? nums<ManualAccount>(data, ACCOUNT_NUMS) : null;
+  if (!data) throw new Error('Compte introuvable (supprimé ?).');
+  return nums<ManualAccount>(data, ACCOUNT_NUMS);
 }
 
 export async function fetchPositions(accountId: string): Promise<PositionRow[]> {
@@ -109,10 +111,20 @@ export async function fetchPositions(accountId: string): Promise<PositionRow[]> 
   return (data ?? []).map((r) => nums<PositionRow>(r, POSITION_NUMS));
 }
 
-export async function fetchPosition(id: string): Promise<PositionRow | null> {
+export async function fetchPosition(id: string): Promise<PositionRow> {
   const { data, error } = await supabase.from('position_view').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
-  return data ? nums<PositionRow>(data, POSITION_NUMS) : null;
+  if (!data) throw new Error('Position introuvable (supprimée ?).');
+  return nums<PositionRow>(data, POSITION_NUMS);
+}
+
+/** Position déjà détenue sur ce titre dans ce compte, s'il y en a une. */
+export async function findPosition(accountId: string, instrumentId: string) {
+  const { data, error } = await supabase.from('positions').select('id, quantity, avg_cost, cost_currency')
+    .eq('account_id', accountId).eq('instrument_id', instrumentId).maybeSingle();
+  if (error) throw error;
+  return data ? { ...data, quantity: Number(data.quantity), avg_cost: Number(data.avg_cost) } as
+    { id: string; quantity: number; avg_cost: number; cost_currency: string } : null;
 }
 
 export type AccountInput = {
@@ -212,9 +224,10 @@ export async function savePosition(p: PositionInput) {
     account_id: p.account_id, instrument_id: p.instrument_id, quantity: p.quantity,
     avg_cost: p.avg_cost, cost_currency: p.cost_currency ?? 'EUR', updated_at: new Date().toISOString(),
   };
+  // Pas d'upsert : un ajout sur un titre déjà détenu est fusionné par l'écran (mergePosition).
   const { error } = p.id
     ? await supabase.from('positions').update(row).eq('id', p.id)
-    : await supabase.from('positions').upsert(row, { onConflict: 'account_id,instrument_id' });
+    : await supabase.from('positions').insert(row);
   if (error) throw error;
 }
 

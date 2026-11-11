@@ -8,15 +8,30 @@ import {
 } from '@/lib/patrimoine';
 import { parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
-import { Chip, Loading } from '@/components/ui';
+import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, DangerLink, Field, PrimaryButton } from '@/components/form';
 
 /** Création (sans `id`) ou modification d'un compte manuel. */
 export default function AccountEdit() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const existing = useLoad(() => (id ? fetchManualAccount(id) : Promise.resolve(null)), [id]);
-  if (id && !existing.data && !existing.error) return <Loading />;
-  return <AccountForm key={existing.data?.id ?? 'new'} account={existing.data ?? null} />;
+  if (!id) return <AccountForm key="new" account={null} />;
+  if (existing.error) return <Gone message={existing.error} />;
+  if (!existing.data) return <Loading />;
+  return <AccountForm key={existing.data.id} account={existing.data} />;
+}
+
+/** Compte introuvable (supprimé) : message + retour à l'onglet. */
+function Gone({ message }: { message: string }) {
+  const t = useTheme();
+  return (
+    <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
+      <View style={s.content}>
+        <ErrorBox message={message} />
+        <PrimaryButton label="Retour au Patrimoine" onPress={() => router.dismissTo('/patrimoine')} />
+      </View>
+    </SafeAreaView>
+  );
 }
 
 function AccountForm({ account }: { account: ManualAccount | null }) {
@@ -53,8 +68,13 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
       {
         text: 'Supprimer', style: 'destructive',
         onPress: async () => {
-          await deleteManualAccount(account!.id);
-          router.navigate('/patrimoine');
+          try {
+            await deleteManualAccount(account!.id);
+            // Ferme le formulaire et le détail du compte supprimé (navigate empilerait un nouvel onglet).
+            router.dismissTo('/patrimoine');
+          } catch (e) {
+            Alert.alert('Compte', e instanceof Error ? e.message : String((e as { message?: string }).message ?? e));
+          }
         },
       },
     ]);

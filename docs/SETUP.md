@@ -202,33 +202,32 @@ Si tu as un compte Interactive Brokers, ses positions et liquidités peuvent se 
 Expo Go sert au développement : l'app ne tourne que tant que ton ordinateur lance `npx expo start`. Pour une vraie app installée sur ton téléphone :
 
 1. Dans `app/app.json`, remplace `android.package` (`com.jsjl29.selffinance`) par un identifiant à toi, par ex. `com.<ton-pseudo>.selffinance`.
-2. Connecte-toi à Expo et prépare le projet :
+2. Connecte-toi à Expo et relie le projet **à ton compte** (le dépôt contient l'identifiant de projet de l'auteur : `init --force` le remplace par le tien) :
    ```bash
    cd app
    npx eas-cli login
-   npx eas-cli init                 # lie le projet à ton compte Expo
-   npx eas-cli build:configure      # crée eas.json
+   npx eas-cli init --force         # écrit ton projectId et ton owner dans app.json
+   npx eas-cli update:configure     # adresse des mises à jour de TON projet
    ```
-3. Dans `app/eas.json`, demande un **APK** pour le profil `preview` :
-   ```json
-   {
-     "build": {
-       "preview": { "distribution": "internal", "android": { "buildType": "apk" }, "environment": "preview" }
-     }
-   }
-   ```
-4. `.env.local` n'est pas envoyé au cloud d'Expo : déclare les deux variables (valeurs de l'étape 8) :
+   `app/eas.json` est déjà fourni : profil `preview` = **APK** installable, canal de mises à jour `preview`.
+3. `.env.local` n'est pas envoyé au cloud d'Expo : déclare les deux variables (valeurs de l'étape 8), pour `preview` (et `production` si tu l'utilises) :
    ```bash
    npx eas-cli env:create --environment preview --visibility plaintext --name EXPO_PUBLIC_SUPABASE_URL --value https://<ref>.supabase.co
    npx eas-cli env:create --environment preview --visibility plaintext --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY --value <clé publishable>
    ```
-5. Lance la compilation (10 à 20 min dans le cloud d'Expo) :
+4. Lance la compilation (10 à 20 min dans le cloud d'Expo) :
    ```bash
    npx eas-cli build --platform android --profile preview
    ```
-6. Ouvre le lien donné à la fin sur ton téléphone, télécharge l'**APK** et installe-le (autorise l'installation depuis cette source).
+5. Ouvre le lien donné à la fin sur ton téléphone, télécharge l'**APK** et installe-le (autorise l'installation depuis cette source).
 
-**Mises à jour** : une modification du code de l'app se publie sans réinstaller avec **EAS Update** (`npx eas-cli update`, à configurer une fois avec `npx eas-cli update:configure`). Une recompilation complète n'est nécessaire qu'après l'ajout d'un module natif.
+**Continuer à développer après l'installation** :
+- **Développer** : comme avant, `npx expo start` + Expo Go (ou le navigateur sur `http://localhost:8081`). L'APK installé n'est pas touché.
+- **Envoyer une nouvelle version à l'APK sans le réinstaller** (EAS Update) : une commande, l'app la récupère à son prochain lancement (en général au 2ᵉ lancement) :
+  ```bash
+  npx eas-cli update --channel preview --environment preview --message "Ce qui change"
+  ```
+- **Recompiler l'APK** seulement si on ajoute un module natif (ex. un nouveau `expo-…` avec du code natif) : augmente `version` dans `app.json` (ex. `1.0.0` → `1.1.0`), puis refais l'étape 4. Les mises à jour ne s'appliquent qu'aux APK de la même version (`runtimeVersion: appVersion`).
 
 > La vraie app ouvre directement l'adresse de retour `selffinance://` : la reconnexion des banques y est plus fluide que dans Expo Go.
 

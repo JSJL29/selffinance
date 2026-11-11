@@ -29,6 +29,23 @@
       "expo-font",
       "expo-web-browser"
     ],
-    "scheme": "selffinance"
+    "scheme": "selffinance",
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "0fb44b5c-f96d-4d79-a80d-e974745d6c87"
+      }
+    },
+    "owner": "jsjl",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0fb44b5c-f96d-4d79-a80d-e974745d6c87"
+    }
   }
 }

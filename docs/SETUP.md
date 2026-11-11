@@ -255,7 +255,7 @@ Garde ces règles personnelles hors de git, par ex. dans `supabase/private/rules
 | « *Banque* n'a partagé aucun compte » | Banque non liée dans le Control Panel Enable Banking | Lie-la (étape 4.4), puis reconnecte en cochant les mêmes comptes |
 | Erreur `invalid_request` à la connexion | Compte coché différent de celui lié dans le Control Panel | Recommence en cochant exactement les mêmes comptes |
 | « Clé Enable Banking invalide ou absente » | Secret `EB_PRIVATE_KEY` manquant ou incomplet | Refais l'étape 6.2 avec tout le contenu du `.pem` |
-| Solde à 0,00 € alors que le compte est approvisionné | Certaines banques (SG notamment) ne renvoient pas de vrai solde | Ouvre le compte et saisis le solde à la main : il est ensuite tenu à jour par les opérations |
+| Solde différent de celui de ta banque | Selon les banques, le solde renvoyé est celui de la veille ou exclut les opérations en cours. Un solde à 0,00 € est en général réel (compte de passage vidé aussitôt) | Vérifie dans l'app de ta banque ; s'il est vraiment faux, ouvre le compte et saisis le solde à la main : il est ensuite tenu à jour par les opérations |
 | « Plus de synchro manuelle disponible » | Budget de 4 accès/jour atteint | Attends le lendemain, ou retire une heure automatique dans ⚙ Réglages |
 | Les paiements carte récents n'apparaissent pas | Opérations encore « en attente » côté banque | Elles arrivent une fois comptabilisées (1 à 3 jours) |
 | « cours introuvable » sur un titre | Yahoo ne connaît pas ce titre | Ouvre la position et saisis la valeur à la main |

@@ -55,6 +55,7 @@ $env:EB_KEY_PATH = "C:\chemin\vers\cle.pem"
 - **11/11/2026 : app Production `SelfFinance` active** (clé `d3b72a02-….pem` dans Téléchargements).
   - `check` FR : BNP, SG, Revolut, Fortuneo et Trade Republic sont disponibles. Natixis Interépargne est absente.
   - **SG connectée.** Un compte, consentement valable jusqu'au 08/02/2027. `tx` remonte bien les vraies transactions.
+  - Solde SG à **0,00 €** (type `XPCD`) : **c'est le vrai solde** (confirmé le 11/11/2026). Le compte sert de compte de passage, l'argent repart aussitôt (IBKR, Fortuneo, Revolut). Aucun solde manuel à saisir.
   - Le premier essai SG a renvoyé `invalid_request`. Le deuxième a marché en cochant le même compte que celui lié dans le Control Panel.
   - Bug corrigé : PowerShell 5.1 décodait les réponses en Latin-1. La fonction `Call` relit maintenant les octets en UTF-8.
   - La session sandbox a été archivée dans `scripts/sessions.sandbox.json`.

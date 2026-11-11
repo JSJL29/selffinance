@@ -102,7 +102,7 @@ function ConsentBox({ bank, until, onDone }: { bank: string; until: string | nul
   );
 }
 
-/** Explique d'où vient le solde, et permet de le corriger à la main (utile pour la SG). */
+/** Explique d'où vient le solde, et permet de le corriger à la main si la banque en renvoie un faux. */
 function BalanceEditor({ account, onSaved }: { account: AccountRow; onSaved: () => void }) {
   const t = useTheme();
   const [editing, setEditing] = useState(false);

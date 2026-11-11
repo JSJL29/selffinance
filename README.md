@@ -65,9 +65,11 @@ flowchart LR
 - L'app ne parle qu'à Supabase, avec le compte du propriétaire ; chaque table est protégée par des règles d'accès (RLS).
 - Les tâches automatiques tournent dans la base (`pg_cron`), même quand le téléphone et le PC sont éteints.
 
-## 🚀 Installer
+## 🚀 Installer ta propre SelfFinance
 
-Tout est expliqué pas à pas dans **[docs/SETUP.md](docs/SETUP.md)** : Supabase, Enable Banking, secrets, app sur le téléphone, connexion des banques, Patrimoine, IBKR, APK et dépannage. Chacun installe **sa propre copie** : aucune donnée n'est partagée.
+> ⚠️ **Ne partage pas ton APK.** Un APK contient l'adresse de **ta** base Supabase : la personne qui l'installe se connecterait à ta base (sans voir tes données, réservées au propriétaire, mais ce n'est pas son app). **Chacun crée sa propre copie** : sa base Supabase, son app Enable Banking, son projet Expo et son APK. Rien n'est partagé, et ça reste gratuit.
+
+Tout est expliqué de A à Z dans **[docs/SETUP.md](docs/SETUP.md)** (environ 1 h) : comptes à créer, base et fonctions, secrets, app sur le téléphone, connexion des banques, Patrimoine, IBKR, APK, mises à jour et dépannage. La section [« Ce qui est propre à chaque copie »](docs/SETUP.md#ce-qui-est-propre-à-chaque-copie) liste tout ce qu'il faut remplacer.
 
 ## 🗺️ Feuille de route
 

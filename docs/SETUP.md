@@ -5,6 +5,29 @@ Ce guide installe **ta propre instance** de SelfFinance : ta base de données, t
 > **Durée** : environ 1 h la première fois, en grande partie de l'attente (création du projet, compilation de l'app).
 > **Coût** : 0 €. Supabase, Enable Banking (usage personnel), Expo et Yahoo Finance sont gratuits dans ce cadre.
 
+## Ce qui est propre à chaque copie
+
+> ⚠️ N'installe pas l'APK de quelqu'un d'autre et ne partage pas le tien : il est relié à **une** base Supabase précise. Construis le tien en suivant ce guide.
+
+Le dépôt contient quelques identifiants de l'auteur : **remplace-les tous** par les tiens. Rien d'autre n'est à modifier dans le code.
+
+| Élément | Où | Qui le remplace | Étape |
+|---|---|---|---|
+| Base de données (URL + clé publishable) | `app/.env.local` (non versionné) et variables EAS | toi | 8 et 12 |
+| Projet Supabase lié à la ligne de commande | `npx supabase link --project-ref <ta ref>` | toi | 5 |
+| Secrets du serveur (adresse du projet, secret du cron, ID Enable Banking, IBKR) | coffre Supabase (Vault), via `supabase/setup/secrets.sql` | toi | 6 et 11 |
+| Clé privée Enable Banking | secret de fonction `EB_PRIVATE_KEY` | toi | 6.2 |
+| Application Enable Banking (et ses comptes liés) | Control Panel Enable Banking | toi | 4 |
+| Compte propriétaire | Supabase → Authentication (le **premier** compte créé) | toi | 7 |
+| Identifiant Android `com.jsjl29.selffinance` | `app/app.json` → `android.package` | toi | 12.1 |
+| Projet Expo (`owner`, `extra.eas.projectId`, `updates.url`) | `app/app.json` | `eas init --force` puis `eas update:configure` | 12.2 |
+| Flex Query et jeton IBKR (facultatif) | portail IBKR → Vault | toi | 11 |
+| Règles perso de virements internes (facultatif) | `supabase/private/rules.sql` (non versionné) | toi | 13 |
+
+Ce qui est **identique** pour tout le monde (ne rien changer) : le code de l'app, les migrations `supabase/migrations/`, les fonctions `supabase/functions/`, `supabase/config.toml`, `app/eas.json`.
+
+> **Sécurité** : à l'étape 7, ferme les inscriptions (**Allow new users to sign up** désactivé). Sinon, quelqu'un qui connaîtrait l'adresse de ta base pourrait y créer un compte (vide et sans accès à tes données, mais inutile).
+
 ## Sommaire
 
 1. [Ce qu'il te faut](#1-ce-quil-te-faut)
@@ -119,7 +142,7 @@ Dans Supabase : **Edge Functions → Secrets → Add new secret** :
 1. Supabase : **Authentication → Users → Add user → Create new user**.
 2. Ton e-mail, un mot de passe, et coche **Auto Confirm User**.
 3. **Le premier compte créé devient automatiquement le propriétaire** : lui seul voit les données. Les comptes créés ensuite n'ont accès à rien.
-4. Recommandé : **Authentication → Sign In / Providers**, désactive **Allow new users to sign up**.
+4. **À faire** : **Authentication → Sign In / Providers**, désactive **Allow new users to sign up** (personne d'autre ne doit pouvoir créer de compte sur ta base).
 
 ## 8. Lancer l'app sur ton téléphone
 

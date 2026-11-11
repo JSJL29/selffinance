@@ -48,5 +48,21 @@ export function maskIban(iban: string | null): string {
   return `${s.slice(0, 4)} •••• ${s.slice(-4)}`;
 }
 
+/** Lit un montant saisi à la française (« 1 234,56 », « 512,3 € », « -3.2 »). Renvoie null si invalide. */
+export function parseAmount(s: string): number | null {
+  const t = s.replace(/[\s  €]/g, '');
+  if (!/^-?\d+([.,]\d+)?$/.test(t)) return null;
+  return Number(t.replace(',', '.'));
+}
+
+const pctFmt = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** 0.0712 → « +7,1 % » ; null → « — ». */
+export function pct(x: number | null): string {
+  if (x == null) return '—';
+  const s = `${pctFmt.format(Math.abs(x) * 100)} %`;
+  return x > 0 ? `+${s}` : x < 0 ? `−${s}` : s;
+}
+
 export const isoDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

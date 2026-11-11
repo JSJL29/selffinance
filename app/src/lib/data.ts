@@ -182,7 +182,7 @@ export async function syncNow(): Promise<string | null> {
 export type Aspsp = { name: string; country: string; logo: string | null; max_days: number };
 
 /** Lit le message d'erreur JSON renvoyé par une fonction Supabase. */
-async function functionError(error: unknown): Promise<string> {
+export async function functionError(error: unknown): Promise<string> {
   const res = (error as { context?: Response }).context;
   const body = res ? await res.json().catch(() => null) : null;
   return body?.error ?? (error as Error).message ?? String(error);

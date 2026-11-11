@@ -1,6 +1,6 @@
 // Synchro du compte IBKR via le Flex Web Service (lecture seule).
 //   POST /ibkr/sync   secret Vault (cron 7 h) ou JWT app_user (bouton « Synchroniser IBKR »)
-// Jeton : secret de fonction IBKR_FLEX_TOKEN. ID de la Flex Query : Vault `ibkr_query_id`.
+// Jeton : secret de fonction IBKR_FLEX_TOKEN, sinon Vault `ibkr_token`. ID de la Flex Query : Vault `ibkr_query_id`.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { parseFlexResponse, parseStatement } from "./flex.ts";
 
@@ -76,7 +76,8 @@ async function sync() {
   const { data: cfg } = await db.rpc("ibkr_config").single();
   const queryId = (cfg as { query_id: string | null } | null)?.query_id;
   if (!queryId) throw new Error("ID de la Flex Query IBKR non configuré (Vault ibkr_query_id).");
-  const token = env("IBKR_FLEX_TOKEN");
+  const token = Deno.env.get("IBKR_FLEX_TOKEN") || ((await db.rpc("ibkr_token")).data as string | null);
+  if (!token) throw new Error("Jeton IBKR non configuré (secret IBKR_FLEX_TOKEN ou Vault ibkr_token).");
 
   const accountId = await ibkrAccountId();
   try {

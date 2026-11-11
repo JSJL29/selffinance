@@ -166,6 +166,12 @@ Onglet **Patrimoine** → **« Ajouter un compte »** :
 
 L'app calcule pour chaque ligne et chaque compte la valeur, le montant investi et la **plus ou moins-value**. Le total du Patrimoine inclut aussi tes comptes bancaires.
 
+**Ventes, dividendes et bilan fiscal** :
+- Sur une position, **« Vendre »** : quantité, prix de vente, frais et date. L'app affiche la plus-value avant de valider, diminue la position (le PRU des titres restants ne change pas) et **ajoute le produit aux liquidités**.
+- Sur un compte, **« Ajouter un dividende »** : montant brut et impôt déjà prélevé par le courtier ; le net s'ajoute aux liquidités.
+- Une vente ou un dividende saisi se supprime par **appui long** : tout revient comme avant.
+- **« Bilan fiscal »** (onglet Patrimoine) : plus et moins-values réalisées de l'année, **tous CTO confondus**, moins-values reportées, dividendes, **impôt estimé à la flat tax** (taux réglable, 31,4 % en 2026), déjà prélevé et reste à payer. Le PEA est affiché à part : il n'est pas imposé tant que tu ne retires rien. C'est une **estimation** : le relevé fiscal (IFU) de tes courtiers français fait foi.
+
 > **Devise** : un PRU saisi en **€** donne une plus-value qui inclut l'effet de change ; en **$**, elle est calculée au taux du jour (« hors effet de change »).
 
 ## 11. IBKR (facultatif)
@@ -177,7 +183,9 @@ Si tu as un compte Interactive Brokers, ses positions et liquidités peuvent se 
    - **Nom** : `selffinance` ;
    - section **Positions ouvertes / Open Positions** : niveau **Résumé / Summary**, coche *Symbol, Description, Conid, ISIN, Asset Class, Currency, Quantity, Mark Price, Cost Basis Price, Listing Exchange* ;
    - section **Rapport de liquidités / Cash Report** : coche *Currency, Ending Cash* ;
-   - **Format** : XML ; **Période** : *Last Business Day* ;
+   - section **Transactions / Trades** (niveau *Execution*) : coche *Trade ID, Conid, Symbol, ISIN, Description, Asset Class, Currency, FX Rate To Base, Trade Date, Quantity, Trade Price, IB Commission, Buy/Sell, FIFO Realized P&L* — pour les **ventes et plus-values réalisées** ;
+   - section **Transactions en espèces / Cash Transactions** : coche *Type, Conid, Description, Currency, FX Rate To Base, Date/Time, Amount, Transaction ID* — pour les **dividendes et retenues à la source** ;
+   - **Format** : XML ; **Période** : *Last 365 Calendar Days* (toute l'année est couverte ; les opérations déjà importées ne sont pas dupliquées) ;
    - **Continuer → Créer**. Le **Query ID** s'affiche avec l'icône ⓘ à côté de la requête.
 3. Bloc **Flex Web Service Configuration → ⚙** : active le service, **Generate New Token** (durée max, **sans** restriction d'IP). Copie le jeton : il ne s'affiche qu'une fois.
 4. Supabase → **SQL Editor** :

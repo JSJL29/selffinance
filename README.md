@@ -25,7 +25,7 @@ Une app perso Android qui regroupe comptes bancaires, épargne et placements, av
 |---|---|---|
 | 🏦 | **Comptes** | Tous les comptes bancaires, leur solde et le total. Bouton de synchro, réglages des synchros automatiques, ajout et reconnexion des banques. |
 | 📄 | **Détail d'un compte** | Les opérations jour par jour, l'état de l'accès bancaire, et un solde saisi à la main si la banque n'en donne pas. |
-| 🥧 | **Patrimoine** | Total général (banques + épargne + placements) et plus-value globale. Livrets, PEA, CTO, assurance-vie, PER, épargne salariale, IBKR. |
+| 🥧 | **Patrimoine** | Total général (banques + épargne + placements) et plus-value globale. Livrets, PEA, CTO, assurance-vie, PER, épargne salariale, IBKR. Ventes, dividendes et **bilan fiscal** de l'année (impôt estimé sur les CTO). |
 | 🔀 | **Transactions** | Toutes les banques mélangées, mois par mois, avec un filtre par banque. Les dépenses sont totalisées **hors virements internes**. |
 
 Les virements entre mes propres comptes (SG → IBKR, SG → Revolut…) sont détectés et grisés : le même argent n'est jamais compté deux fois.
@@ -79,7 +79,8 @@ Tout est expliqué pas à pas dans **[docs/SETUP.md](docs/SETUP.md)** : Supabase
 - [x] Connexion et reconnexion des banques depuis l'app
 - [x] Patrimoine : comptes manuels, positions, cours, plus-values, € ou $
 - [x] IBKR via le Flex Web Service
-- [ ] Historique des opérations (achats, ventes, dividendes)
+- [x] Ventes, dividendes et bilan fiscal annuel estimé (IBKR automatique, le reste manuel)
+- [ ] Historique des achats
 - [ ] Catégorisation des dépenses, abonnements, budgets
 - [ ] Version iPhone
 

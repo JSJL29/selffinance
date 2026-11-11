@@ -4,3 +4,4 @@ scripts/sessions*.json
 .env
 scripts/data/
 supabase/private/
+.superpowers/

@@ -12,8 +12,8 @@ const dayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric
 const monthFmt = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
 const shortFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 
-/** « 2026-11-09 » → Date à midi (évite les décalages de fuseau). */
-export const parseDay = (iso: string) => new Date(`${iso}T12:00:00`);
+/** « 2026-11-09 » (ou un horodatage complet) → Date à midi du jour (évite les décalages de fuseau). */
+export const parseDay = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00`);
 
 export function dayLabel(iso: string): string {
   const today = new Date();

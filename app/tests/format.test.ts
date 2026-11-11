@@ -1,7 +1,12 @@
 // Lancer : node --test tests/   (Node ≥ 23 exécute le TypeScript directement)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAmount, pct } from '../src/lib/format.ts';
+import { parseAmount, pct, shortDate } from '../src/lib/format.ts';
+
+test('shortDate accepte une date seule et un horodatage complet', () => {
+  assert.equal(shortDate('2027-02-08T22:18:28.977+00:00'), shortDate('2027-02-08'));
+  assert.equal(shortDate('2027-02-08 22:18:28.977+00'), shortDate('2027-02-08'));
+});
 
 test('parseAmount accepte la virgule décimale française', () => {
   assert.equal(parseAmount('512,30'), 512.3);

@@ -33,6 +33,9 @@ export default function RootLayout() {
           <Stack.Screen name="patrimoine/account/[id]" />
           <Stack.Screen name="patrimoine/account-edit" />
           <Stack.Screen name="patrimoine/position-edit" />
+          <Stack.Screen name="patrimoine/sell" />
+          <Stack.Screen name="patrimoine/dividend" />
+          <Stack.Screen name="patrimoine/tax" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

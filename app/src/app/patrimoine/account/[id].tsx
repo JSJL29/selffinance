@@ -4,8 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLoad } from '@/lib/data';
-import { ManualAccount, PositionRow, envelopeLabel, fetchManualAccount, fetchPositions, syncIbkr } from '@/lib/patrimoine';
-import { ago, money, pct, shortDate } from '@/lib/format';
+import {
+  ManualAccount, Operation, PositionRow, deleteOperation, envelopeLabel, fetchManualAccount, fetchOperations,
+  fetchPositions, syncIbkr,
+} from '@/lib/patrimoine';
+import { ago, frDate, money, pct, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { Empty, ErrorBox, Loading } from '@/components/ui';
 import { BackLink } from '@/components/form';
@@ -17,10 +20,11 @@ export default function ManualAccountDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const account = useLoad(() => fetchManualAccount(id), [id]);
   const positions = useLoad(() => fetchPositions(id), [id]);
+  const operations = useLoad(() => fetchOperations(id), [id]);
 
   if (!account.data && !account.error) return <Loading />;
   const a = account.data;
-  const refresh = async () => { await Promise.all([account.refresh(), positions.refresh()]); };
+  const refresh = async () => { await Promise.all([account.refresh(), positions.refresh(), operations.refresh()]); };
   const color = a && a.pnl_eur > 0 ? t.success : a && a.pnl_eur < 0 ? t.danger : t.muted;
   const edit = () => router.push({ pathname: '/patrimoine/account-edit', params: { id } });
   const synced = !!a?.sync_source;
@@ -80,12 +84,81 @@ export default function ManualAccountDetail() {
                     <Text style={{ color: t.primary, fontSize: 15, fontWeight: '600' }}>Ajouter une position</Text>
                   </Pressable>
                 )}
+
+                <Text style={[s.section, { color: t.muted }]}>OPÉRATIONS</Text>
+                {operations.error && <ErrorBox message={operations.error} onRetry={operations.reload} />}
+                {operations.data?.map((o) => <OperationLine key={o.id} o={o} onDeleted={refresh} />)}
+                {operations.data?.length === 0 && (
+                  <Empty text={synced ? 'Les ventes et dividendes arrivent avec la synchro IBKR.' : 'Aucune vente ni dividende.'} />
+                )}
+                {!synced && (
+                  <Pressable
+                    onPress={() => router.push({ pathname: '/patrimoine/dividend', params: { accountId: id } })}
+                    style={({ pressed }) => [s.add, { borderColor: t.border, backgroundColor: pressed ? t.border : 'transparent' }]}>
+                    <Ionicons name="cash-outline" size={18} color={t.primary} />
+                    <Text style={{ color: t.primary, fontSize: 15, fontWeight: '600' }}>Ajouter un dividende</Text>
+                  </Pressable>
+                )}
               </>
             )}
           </>
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/** Vente, dividende ou retenue à la source ; les opérations manuelles se suppriment (appui long). */
+function OperationLine({ o, onDeleted }: { o: Operation; onDeleted: () => Promise<void> }) {
+  const t = useTheme();
+  const sell = o.kind === 'sell';
+  const title = sell ? `Vente · ${o.instrument_name ?? 'titre'}`
+    : o.kind === 'dividend' ? `Dividende${o.instrument_name ? ` · ${o.instrument_name}` : ''}`
+    : `Retenue à la source${o.instrument_name ? ` · ${o.instrument_name}` : ''}`;
+  const detail = sell
+    ? `${String(o.quantity).replace('.', ',')} × ${money(o.price ?? 0, o.currency)}${o.avg_cost != null ? ` · PRU ${money(o.avg_cost, o.currency)}` : ''}`
+    : o.tax_withheld > 0 ? `brut · ${money(o.tax_withheld, o.currency)} déjà prélevés` : o.note ?? '';
+  const value = sell ? o.realized : o.amount;
+  const color = (value ?? 0) > 0 ? t.success : (value ?? 0) < 0 ? t.danger : t.muted;
+
+  function remove() {
+    if (o.source !== 'manual') return;
+    showAlert(sell ? 'Annuler cette vente ?' : 'Supprimer ce dividende ?',
+      sell ? 'Les titres reviennent dans la position et le montant est retiré des liquidités.'
+        : 'Le montant est retiré des liquidités.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer', style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteOperation(o.id);
+              await onDeleted();
+            } catch (e) {
+              showAlert('Opération', e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e));
+            }
+          },
+        },
+      ]);
+  }
+
+  return (
+    <Pressable onLongPress={remove} delayLongPress={400}
+      style={({ pressed }) => [s.position, { backgroundColor: pressed && o.source === 'manual' ? t.border : t.card, borderColor: t.border }]}>
+      <View style={s.grow}>
+        <Text style={[s.name, { color: t.text }]} numberOfLines={1}>{title}</Text>
+        {!!detail && <Text style={[s.small, { color: t.muted }]} numberOfLines={1}>{detail}</Text>}
+        <Text style={[s.tiny, { color: t.muted }]}>
+          {frDate(o.date)}{o.source === 'ibkr' ? ' · IBKR' : ' · appui long pour supprimer'}
+        </Text>
+      </View>
+      <View style={s.right}>
+        <Text style={[s.amount, { color }]}>{value == null ? '—' : money(value, o.currency, { sign: true })}</Text>
+        {o.currency !== 'EUR' && (sell ? o.realized_eur : o.amount_eur) != null && (
+          <Text style={[s.tiny, { color: t.muted }]}>≈ {money((sell ? o.realized_eur : o.amount_eur)!, 'EUR', { sign: true })}</Text>
+        )}
+      </View>
+    </Pressable>
   );
 }
 

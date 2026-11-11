@@ -41,6 +41,10 @@ export default function Patrimoine() {
               Placements {money(nw.pnl, 'EUR', { sign: true })} ({pct(nw.pnlPct)})
             </Text>
           )}
+          <Pressable onPress={() => router.push('/patrimoine/tax')} hitSlop={8} style={s.taxLink}>
+            <Ionicons name="receipt-outline" size={15} color={t.primary} />
+            <Text style={{ color: t.primary, fontSize: 14, fontWeight: '600' }}>Bilan fiscal {new Date().getFullYear()}</Text>
+          </Pressable>
           {bank.error && <ErrorBox message={bank.error} onRetry={bank.reload} />}
           {manual.error && <ErrorBox message={manual.error} onRetry={manual.reload} />}
         </View>
@@ -157,6 +161,7 @@ const s = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8 },
   total: { fontSize: 36, fontWeight: '700', marginVertical: 4, fontVariant: ['tabular-nums'] },
   small: { fontSize: 13 },
+  taxLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10 },
   section: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
   sectionTitle: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5, fontVariant: ['tabular-nums'] },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, marginHorizontal: 12, marginBottom: 8, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },

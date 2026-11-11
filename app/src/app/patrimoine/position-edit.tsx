@@ -269,6 +269,16 @@ function EditForm({ p }: { p: PositionRow }) {
         </>
       )}
       <PrimaryButton label="Enregistrer" onPress={save} disabled={!valid} busy={busy} />
+      {!valueLine && (
+        <Pressable
+          onPress={() => router.push({ pathname: '/patrimoine/sell', params: { positionId: p.id } })}
+          style={({ pressed }) => [s.sell, { borderColor: t.primary, backgroundColor: pressed ? t.border : 'transparent' }]}>
+          <Text style={{ color: t.primary, fontSize: 16, fontWeight: '600' }}>Vendre</Text>
+        </Pressable>
+      )}
+      <Text style={[s.small, { color: t.muted }]}>
+        « Vendre » enregistre la plus-value réalisée pour ton bilan fiscal. « Supprimer » efface la ligne sans rien enregistrer.
+      </Text>
       <DangerLink label="Supprimer cette position" onPress={remove} />
     </Screen>
   );
@@ -296,6 +306,7 @@ const s = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   name: { fontSize: 15, fontWeight: '600' },
   small: { fontSize: 13 },
+  sell: { borderWidth: 1, borderRadius: 12, paddingVertical: 13, alignItems: 'center' },
   picked: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, borderRadius: 12, borderWidth: 1.5 },
   result: { padding: 12, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, gap: 2 },
 });

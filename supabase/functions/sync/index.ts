@@ -1,6 +1,8 @@
 // Synchronise soldes et transactions de tous les comptes liés via Enable Banking.
-// Appelée par pg_cron (voir migration) avec `Authorization: Bearer <sync_secret Vault>`.
-// Corps optionnel : { "days": 90 } pour forcer une reprise de l'historique.
+// Appelée par pg_cron aux heures choisies dans l'app (run_scheduled_sync) avec
+// `Authorization: Bearer <sync_secret Vault>`, ou par l'app (bouton « Synchroniser »)
+// avec le JWT de l'utilisateur, dans la limite du budget du jour (sync_budget).
+// Corps optionnel (cron seulement) : { "days": 90 } pour forcer une reprise de l'historique.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const EB = "https://api.enablebanking.com";
@@ -170,15 +172,45 @@ async function syncFx() {
   if (error) throw new Error(error.message);
 }
 
-Deno.serve(async (req) => {
-  const { sync_secret } = await getConfig();
-  if (!sync_secret || req.headers.get("authorization") !== `Bearer ${sync_secret}`) {
-    return new Response("unauthorized", { status: 401 });
-  }
-  const body = await req.json().catch(() => ({}));
-  const forceDays = Number(body?.days) > 0 ? Number(body.days) : null;
+// Budget : 4 accès/jour (DSP2) = synchros auto (sync_settings) + manuelles (voir sync_budget).
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+const fail = (status: number, error: string) => Response.json({ ok: false, error }, { status, headers: CORS });
 
-  const { data: run } = await db.from("sync_runs").insert({}).select("id").single();
+// Cron (secret Vault) ou app (JWT d'un app_user, quota journalier).
+async function authorize(req: Request): Promise<"cron" | "manual" | Response> {
+  const auth = req.headers.get("authorization") ?? "";
+  const { sync_secret } = await getConfig();
+  if (sync_secret && auth === `Bearer ${sync_secret}`) return "cron";
+
+  const { data: u } = await db.auth.getUser(auth.replace(/^Bearer\s+/i, ""));
+  if (!u?.user) return fail(401, "Non connecté.");
+  const { data: member } = await db.from("app_users").select("user_id").eq("user_id", u.user.id).maybeSingle();
+  if (!member) return fail(403, "Accès refusé.");
+
+  const { data: budget, error } = await db.rpc("sync_budget").single();
+  if (error) return fail(500, error.message);
+  if (((budget as { manual_left: number } | null)?.manual_left ?? 0) <= 0) {
+    return fail(429, "Plus de synchro manuelle disponible aujourd'hui (limite bancaire : 4 accès par jour, synchros automatiques comprises).");
+  }
+  const { data: running } = await db.from("sync_runs").select("id")
+    .is("finished_at", null).gte("started_at", new Date(Date.now() - 3 * 60_000).toISOString()).limit(1);
+  if (running?.length) return fail(409, "Une synchro est déjà en cours.");
+  return "manual";
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  const trigger = await authorize(req);
+  if (trigger instanceof Response) return trigger;
+
+  const body = await req.json().catch(() => ({}));
+  // Reprise d'historique réservée au cron / à l'admin.
+  const forceDays = trigger === "cron" && Number(body?.days) > 0 ? Number(body.days) : null;
+
+  const { data: run } = await db.from("sync_runs").insert({ trigger }).select("id").single();
   const log: Record<string, string> = {};
   let ok = true;
 
@@ -186,7 +218,7 @@ Deno.serve(async (req) => {
 
   const { data: accounts, error } = await db.from("accounts")
     .select("uid, bank, name, iban, currency, hidden, bank_sessions(valid_until)");
-  if (error) return new Response(error.message, { status: 500 });
+  if (error) return fail(500, error.message);
 
   let token: string;
   try {
@@ -194,7 +226,7 @@ Deno.serve(async (req) => {
   } catch (e) {
     log.jwt = String(e);
     if (run) await db.from("sync_runs").update({ finished_at: new Date().toISOString(), ok: false, log }).eq("id", run.id);
-    return Response.json({ ok: false, log }, { status: 500 });
+    return Response.json({ ok: false, error: "Clé Enable Banking invalide ou absente.", log }, { status: 500, headers: CORS });
   }
   await Promise.all((accounts ?? []).map(async (acc: Json) => {
     const key = `${acc.bank} ${acc.uid.slice(0, 8)}`;
@@ -217,5 +249,5 @@ Deno.serve(async (req) => {
   if (run) {
     await db.from("sync_runs").update({ finished_at: new Date().toISOString(), ok, log }).eq("id", run.id);
   }
-  return Response.json({ ok, log });
+  return Response.json({ ok, log }, { headers: CORS });
 });

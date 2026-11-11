@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { supabase } from './supabase';
 import { isoDay } from './format';
@@ -122,6 +122,52 @@ export async function setManualBalance(uid: string, amount: number | null) {
   if (error) throw error;
 }
 
+/** Budget de synchro du jour : 4 accès bancaires (DSP2), automatiques + manuels. */
+export type SyncBudget = {
+  daily_limit: number;
+  used: number;
+  auto_left: number;
+  manual_left: number;
+  next_auto: number | null;
+};
+
+export async function fetchSyncBudget(): Promise<SyncBudget> {
+  const { data, error } = await supabase.rpc('sync_budget').single();
+  if (error) throw error;
+  return data as SyncBudget;
+}
+
+/** Heures (heure de Paris) des synchros automatiques, 0 à 4 par jour. */
+export const MAX_AUTO_SYNCS = 4;
+
+export async function fetchAutoHours(): Promise<number[]> {
+  const { data, error } = await supabase.from('sync_settings').select('auto_hours').single();
+  if (error) throw error;
+  return (data.auto_hours as number[]) ?? [];
+}
+
+export async function saveAutoHours(hours: number[]) {
+  const clean = [...new Set(hours)].sort((a, b) => a - b).slice(0, MAX_AUTO_SYNCS);
+  const { error } = await supabase
+    .from('sync_settings')
+    .update({ auto_hours: clean, updated_at: new Date().toISOString() })
+    .eq('id', true);
+  if (error) throw error;
+}
+
+/** Lance une synchro des banques maintenant. Renvoie un message d'erreur, ou null si tout est OK. */
+export async function syncNow(): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke('sync', { body: {} });
+  if (error) {
+    // Erreur HTTP de la fonction : son message est dans le corps JSON.
+    const res = (error as { context?: Response }).context;
+    const body = res ? await res.json().catch(() => null) : null;
+    return body?.error ?? error.message;
+  }
+  if (data && data.ok === false) return 'Certaines banques n\'ont pas pu être synchronisées.';
+  return null;
+}
+
 /** Libellé principal d'une transaction. */
 export function txTitle(t: Tx): string {
   if (t.is_internal && t.internal_label) return t.internal_label;
@@ -150,7 +196,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const fnRef = useRef(fn);
-  fnRef.current = fn;
+  useLayoutEffect(() => { fnRef.current = fn; });
 
   const load = useCallback(async () => {
     try {

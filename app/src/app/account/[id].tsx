@@ -90,7 +90,7 @@ function BalanceEditor({ account, onSaved }: { account: AccountRow; onSaved: () 
     const valid = value.trim() !== '' && Number.isFinite(parsed);
     return (
       <View style={s.editor}>
-        <Text style={[s.small, { color: t.muted }]}>Solde actuel du compte (aujourd'hui) :</Text>
+        <Text style={[s.small, { color: t.muted }]}>Solde actuel du compte (aujourd’hui) :</Text>
         <View style={s.editRow}>
           <TextInput
             autoFocus keyboardType="decimal-pad" value={value} onChangeText={setValue}

@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Protected guard={!!session}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="account/[id]" />
+          <Stack.Screen name="settings" />
         </Stack.Protected>
         <Stack.Protected guard={!session}>
           <Stack.Screen name="login" />

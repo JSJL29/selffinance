@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AccountGroup, fetchAccounts, groupAccounts, useLoad } from '@/lib/data';
+import { AccountGroup, fetchAccounts, fetchSyncBudget, groupAccounts, syncNow, useLoad } from '@/lib/data';
 import { ago, money } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
@@ -34,6 +34,7 @@ export default function Accounts() {
               Mis à jour {ago(lastSync)}
               {missing > 0 ? ` · ${missing} solde${missing > 1 ? 's' : ''} à saisir` : ''}
             </Text>
+            <SyncButton onDone={reload} />
             {error && <ErrorBox message={error} onRetry={reload} />}
           </View>
         }
@@ -43,6 +44,60 @@ export default function Accounts() {
         }
       />
     </SafeAreaView>
+  );
+}
+
+/** Synchro manuelle des banques, dans la limite du budget du jour (4 accès, automatiques compris). */
+function SyncButton({ onDone }: { onDone: () => Promise<void> }) {
+  const t = useTheme();
+  const budget = useLoad(fetchSyncBudget, []);
+  const [busy, setBusy] = useState(false);
+  const left = budget.data?.manual_left ?? null;
+  const disabled = busy || !left;
+
+  async function run() {
+    setBusy(true);
+    const err = await syncNow();
+    await Promise.all([onDone(), budget.reload()]);
+    setBusy(false);
+    if (err) Alert.alert('Synchronisation', err);
+  }
+
+  function confirm() {
+    Alert.alert(
+      'Synchroniser maintenant ?',
+      `Les banques limitent les accès à 4 par jour, synchros automatiques comprises. Il te restera ${left! - 1} synchro${left! - 1 > 1 ? 's' : ''} manuelle${left! - 1 > 1 ? 's' : ''} aujourd'hui.`,
+      [{ text: 'Annuler', style: 'cancel' }, { text: 'Synchroniser', onPress: run }],
+    );
+  }
+
+  const next = budget.data?.next_auto;
+  const nextText = next == null ? 'synchro automatique désactivée' : `prochaine auto à ${next} h`;
+
+  return (
+    <View style={s.syncWrap}>
+      <View style={s.syncLine}>
+        <Pressable
+          onPress={confirm} disabled={disabled}
+          style={[s.syncButton, { backgroundColor: t.primary, opacity: disabled && !busy ? 0.45 : 1 }]}>
+          {busy
+            ? <ActivityIndicator size="small" color={t.primaryText} />
+            : <Ionicons name="sync" size={16} color={t.primaryText} />}
+          <Text style={[s.syncText, { color: t.primaryText }]}>
+            {busy ? 'Synchro en cours…' : 'Synchroniser maintenant'}
+          </Text>
+        </Pressable>
+        <Pressable onPress={() => router.push('/settings')} hitSlop={10} accessibilityLabel="Réglages de synchro">
+          <Ionicons name="settings-outline" size={22} color={t.muted} />
+        </Pressable>
+      </View>
+      <Text style={[s.tiny, { color: t.muted }]}>
+        {busy ? 'Environ 20 secondes'
+          : left == null ? ' '
+          : left === 0 ? `Plus de synchro manuelle aujourd'hui · ${nextText}`
+          : `${left} synchro${left > 1 ? 's' : ''} manuelle${left > 1 ? 's' : ''} restante${left > 1 ? 's' : ''} · ${nextText}`}
+      </Text>
+    </View>
   );
 }
 
@@ -90,4 +145,8 @@ const s = StyleSheet.create({
   right: { alignItems: 'flex-end' },
   amount: { fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   signOut: { textAlign: 'center', padding: 24, fontSize: 13 },
+  syncWrap: { marginTop: 14, alignItems: 'flex-start', gap: 6, alignSelf: 'stretch' },
+  syncLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
+  syncButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999 },
+  syncText: { fontSize: 14, fontWeight: '600' },
 });

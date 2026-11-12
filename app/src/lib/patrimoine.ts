@@ -253,7 +253,7 @@ export async function deletePosition(id: string) {
 
 // ---------- Opérations (ventes, dividendes) et bilan fiscal ----------
 
-export type OperationKind = 'sell' | 'dividend' | 'withholding';
+export type OperationKind = 'buy' | 'sell' | 'dividend' | 'withholding';
 
 export type Operation = {
   id: string;
@@ -272,6 +272,7 @@ export type Operation = {
   fx_per_eur: number;
   cash_credit: number;
   source: 'manual' | 'ibkr';
+  provisional: boolean;
   note: string | null;
   instrument_name: string | null;
   account_name: string;

@@ -99,6 +99,18 @@ begin
     raise exception 'doublon IBKR accepté';
   exception when unique_violation then null;
   end;
+
+  -- Un achat (historique) ne change pas le bilan ; une vente provisoire y entre comme estimation
+  select cto_net into v_cash from public.tax_summary(2026);
+  insert into public.operations (account_id, kind, date, quantity, price, currency, source, external_id, provisional)
+  values (a, 'buy', '2026-09-01', 1, 500, 'EUR', 'ibkr', 'trade:B1', true);
+  if (select cto_net from public.tax_summary(2026)) <> v_cash then raise exception 'achat compté dans le bilan'; end if;
+  insert into public.operations (account_id, kind, date, quantity, price, currency, realized, source, external_id, provisional)
+  values (a, 'sell', '2026-09-02', 1, 510, 'EUR', 10, 'ibkr', 'trade:S1', true);
+  if (select cto_net from public.tax_summary(2026)) <> v_cash + 10 then raise exception 'vente provisoire absente du bilan'; end if;
+  if not (select provisional from public.operation_view where external_id = 'trade:S1') then
+    raise exception 'operation_view sans provisional';
+  end if;
 end $$;
 
 select 'OK' as resultat;

@@ -89,7 +89,7 @@ export default function ManualAccountDetail() {
                 {operations.error && <ErrorBox message={operations.error} onRetry={operations.reload} />}
                 {operations.data?.map((o) => <OperationLine key={o.id} o={o} onDeleted={refresh} />)}
                 {operations.data?.length === 0 && (
-                  <Empty text={synced ? 'Les ventes et dividendes arrivent avec la synchro IBKR.' : 'Aucune vente ni dividende.'} />
+                  <Empty text={synced ? 'Les achats, ventes et dividendes arrivent avec la synchro IBKR.' : 'Aucune vente ni dividende.'} />
                 )}
                 {!synced && (
                   <Pressable
@@ -108,18 +108,26 @@ export default function ManualAccountDetail() {
   );
 }
 
-/** Vente, dividende ou retenue à la source ; les opérations manuelles se suppriment (appui long). */
+/**
+ * Achat (IBKR), vente, dividende ou retenue à la source ; les opérations manuelles se suppriment (appui long).
+ * « provisoire » : ordre du jour, remplacé le lendemain par le relevé IBKR (plus-value calculée par IBKR).
+ */
 function OperationLine({ o, onDeleted }: { o: Operation; onDeleted: () => Promise<void> }) {
   const t = useTheme();
   const sell = o.kind === 'sell';
+  const buy = o.kind === 'buy';
   const title = sell ? `Vente · ${o.instrument_name ?? 'titre'}`
+    : buy ? `Achat · ${o.instrument_name ?? 'titre'}`
     : o.kind === 'dividend' ? `Dividende${o.instrument_name ? ` · ${o.instrument_name}` : ''}`
     : `Retenue à la source${o.instrument_name ? ` · ${o.instrument_name}` : ''}`;
-  const detail = sell
-    ? `${String(o.quantity).replace('.', ',')} × ${money(o.price ?? 0, o.currency)}${o.avg_cost != null ? ` · PRU ${money(o.avg_cost, o.currency)}` : ''}`
+  const qtyPrice = `${String(o.quantity).replace('.', ',')} × ${money(o.price ?? 0, o.currency)}`;
+  const detail = sell ? `${qtyPrice}${o.avg_cost != null ? ` · PRU ${money(o.avg_cost, o.currency)}` : ''}`
+    : buy ? `${qtyPrice}${o.fees > 0 ? ` · frais ${money(o.fees, o.currency)}` : ''}`
     : o.tax_withheld > 0 ? `brut · ${money(o.tax_withheld, o.currency)} déjà prélevés` : o.note ?? '';
-  const value = sell ? o.realized : o.amount;
-  const color = (value ?? 0) > 0 ? t.success : (value ?? 0) < 0 ? t.danger : t.muted;
+  // Achat : montant investi (neutre) ; vente : plus-value ; dividende / retenue : montant.
+  const value = sell ? o.realized : buy ? (o.quantity ?? 0) * (o.price ?? 0) + o.fees : o.amount;
+  const valueEur = sell ? o.realized_eur : buy ? (value == null ? null : value / o.fx_per_eur) : o.amount_eur;
+  const color = buy ? t.text : (value ?? 0) > 0 ? t.success : (value ?? 0) < 0 ? t.danger : t.muted;
 
   function remove() {
     if (o.source !== 'manual') return;
@@ -149,13 +157,13 @@ function OperationLine({ o, onDeleted }: { o: Operation; onDeleted: () => Promis
         <Text style={[s.name, { color: t.text }]} numberOfLines={1}>{title}</Text>
         {!!detail && <Text style={[s.small, { color: t.muted }]} numberOfLines={1}>{detail}</Text>}
         <Text style={[s.tiny, { color: t.muted }]}>
-          {frDate(o.date)}{o.source === 'ibkr' ? ' · IBKR' : ' · appui long pour supprimer'}
+          {frDate(o.date)}{o.source === 'ibkr' ? ` · IBKR${o.provisional ? ' · provisoire' : ''}` : ' · appui long pour supprimer'}
         </Text>
       </View>
       <View style={s.right}>
-        <Text style={[s.amount, { color }]}>{value == null ? '—' : money(value, o.currency, { sign: true })}</Text>
-        {o.currency !== 'EUR' && (sell ? o.realized_eur : o.amount_eur) != null && (
-          <Text style={[s.tiny, { color: t.muted }]}>≈ {money((sell ? o.realized_eur : o.amount_eur)!, 'EUR', { sign: true })}</Text>
+        <Text style={[s.amount, { color }]}>{value == null ? '—' : money(value, o.currency, { sign: !buy })}</Text>
+        {o.currency !== 'EUR' && valueEur != null && (
+          <Text style={[s.tiny, { color: t.muted }]}>≈ {money(valueEur, 'EUR', { sign: !buy })}</Text>
         )}
       </View>
     </Pressable>

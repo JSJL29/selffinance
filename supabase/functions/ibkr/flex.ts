@@ -19,13 +19,14 @@ export type FlexTrade = {
   name: string;
   isin: string | null;
   type: FlexPosition['type'];
+  side: 'BUY' | 'SELL';
   date: string;
-  quantity: number;     // quantité vendue (positive)
+  quantity: number;     // quantité achetée ou vendue (positive)
   price: number;
   commission: number;   // frais (positifs)
   currency: string;
   fxRateToBase: number | null;   // null si absent du relevé (taux à prendre ailleurs)
-  realized: number;     // plus-value réalisée calculée par IBKR (FIFO), dans `currency`
+  realized: number;     // plus-value réalisée calculée par IBKR (FIFO), dans `currency` ; 0 pour un achat
 };
 export type FlexCashTx = {
   id: string;
@@ -40,6 +41,7 @@ export type FlexCashTx = {
 export type FlexStatement = {
   accountId: string | null;
   date: string | null;
+  hasTrades: boolean;   // section Trades présente : le relevé fait foi pour les ordres jusqu'à `date`
   positions: FlexPosition[];
   cash: { currency: string; amount: number }[];
   trades: FlexTrade[];
@@ -109,10 +111,10 @@ export function parseStatement(xml: string): FlexStatement {
     .filter((c) => c.currency && c.currency !== 'BASE_SUMMARY' && Number.isFinite(num(c.endingCash)))
     .map((c) => ({ currency: c.currency, amount: num(c.endingCash) }));
 
-  // Ventes de titres uniquement (pas les achats, ni les conversions de devises « CASH », ni les dérivés),
+  // Achats et ventes de titres (pas les conversions de devises « CASH », ni les dérivés),
   // niveau exécution ; une ligne sans date est ignorée plutôt que de bloquer toute la synchro.
   const trades = elements(xml, 'Trade')
-    .filter((t) => t.buySell === 'SELL' && (t.levelOfDetail ?? 'EXECUTION') === 'EXECUTION' && t.tradeID
+    .filter((t) => (t.buySell === 'BUY' || t.buySell === 'SELL') && (t.levelOfDetail ?? 'EXECUTION') === 'EXECUTION' && t.tradeID
       && TYPES[t.assetCategory ?? ''] && isoDate(t.tradeDate))
     .map((t): FlexTrade => ({
       id: t.tradeID,
@@ -121,13 +123,14 @@ export function parseStatement(xml: string): FlexStatement {
       name: t.description || t.symbol || '',
       isin: t.isin || null,
       type: TYPES[t.assetCategory ?? ''] ?? 'other',
+      side: t.buySell as 'BUY' | 'SELL',
       date: isoDate(t.tradeDate)!,
       quantity: Math.abs(num(t.quantity)),
       price: num(t.tradePrice),
       commission: Math.abs(num(t.ibCommission) || 0),
       currency: t.currency || 'USD',
       fxRateToBase: rate(t.fxRateToBase),
-      realized: num(t.fifoPnlRealized) || 0,
+      realized: t.buySell === 'SELL' ? num(t.fifoPnlRealized) || 0 : 0,
     }));
 
   const CASH_TYPES: Record<string, FlexCashTx['type']> = {
@@ -149,7 +152,10 @@ export function parseStatement(xml: string): FlexStatement {
       description: c.description ?? '',
     }));
 
-  return { accountId: st.accountId ?? null, date: isoDate(st.toDate), positions, cash, trades, cashTx };
+  return {
+    accountId: st.accountId ?? null, date: isoDate(st.toDate), hasTrades: /<Trades[\s>/]/.test(xml),
+    positions, cash, trades, cashTx,
+  };
 }
 
 /** Taux vers la devise de base ; null s'il est absent ou invalide (jamais 1 par défaut). */
@@ -205,10 +211,15 @@ export function parseConfirmations(xml: string): FlexConfirm[] {
     }));
 }
 
+/** Ordre du jour pour l'historique : PRU au moment de l'ordre et plus-value provisoire (ventes). */
+export type TodayOp = FlexConfirm & { avgCost: number | null; realized: number | null };
+
 /**
  * Ajoute au relevé de la veille les ordres exécutés depuis (date > `statementDate`) :
  * achat → quantité + PRU moyen (frais inclus, comme IBKR) ; vente → quantité, PRU inchangé ;
  * espèces débitées ou créditées dans la devise de l'ordre. Le lendemain, le relevé officiel les contient déjà.
+ * `ops` : ces ordres pour l'historique ; plus-value d'une vente = (prix − PRU) × quantité − frais (PRU moyen,
+ * règle française), null si le titre n'est pas connu.
  */
 export function applyTodayTrades(
   positions: FlexPosition[], cash: { currency: string; amount: number }[],
@@ -216,12 +227,13 @@ export function applyTodayTrades(
 ) {
   const pos = new Map(positions.map((p) => [p.conid, { ...p }]));
   const money = new Map(cash.map((c) => [c.currency, c.amount]));
-  let applied = 0;
+  const ops: TodayOp[] = [];
   for (const t of confirms) {
     if (t.date <= statementDate) continue;
-    applied++;
     const p = pos.get(t.conid);
     const gross = t.quantity * t.price;
+    const avgCost = t.side === 'SELL' && p ? p.costBasisPrice : null;
+    ops.push({ ...t, avgCost, realized: avgCost == null ? null : (t.price - avgCost) * t.quantity - t.commission });
     if (t.side === 'BUY') {
       if (p) {
         const q = p.quantity + t.quantity;
@@ -240,7 +252,8 @@ export function applyTodayTrades(
     }
   }
   return {
-    applied,
+    applied: ops.length,
+    ops,
     positions: [...pos.values()].filter((p) => Math.abs(p.quantity) > 1e-9),
     cash: [...money].map(([currency, amount]) => ({ currency, amount })),
   };

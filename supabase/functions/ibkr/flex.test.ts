@@ -77,16 +77,19 @@ test('parseFlexResponse : relevé en cours de génération (1019)', () => {
   assert.match(r.errorMessage!, /in progress/);
 });
 
-test('parseStatement lit les ventes de titres (SELL) avec la plus-value IBKR et de quoi nommer le titre', () => {
+test('parseStatement lit achats et ventes de titres, avec la plus-value IBKR des ventes et de quoi nommer le titre', () => {
   assert.deepEqual(parseStatement(STATEMENT).trades, [
-    { id: '111', conid: '265598', symbol: 'AAPL', name: 'APPLE INC', isin: 'US0378331005', type: 'stock',
+    { id: '110', conid: '265598', symbol: 'AAPL', name: 'AAPL', isin: null, type: 'stock', side: 'BUY',
+      date: '2026-11-04', quantity: 3, price: 290, commission: 1, currency: 'USD', fxRateToBase: 0.9, realized: 0 },
+    { id: '111', conid: '265598', symbol: 'AAPL', name: 'APPLE INC', isin: 'US0378331005', type: 'stock', side: 'SELL',
       date: '2026-11-05', quantity: 2, price: 300, commission: 1, currency: 'USD', fxRateToBase: 0.9, realized: 24.5 },
   ]);
+  assert.equal(parseStatement(STATEMENT).hasTrades, true);
 });
 
-test('parseStatement ignore achats, conversions de devises (CASH), dérivés et lignes sans date', () => {
+test('parseStatement ignore conversions de devises (CASH), dérivés et lignes sans date', () => {
   const ids = parseStatement(STATEMENT).trades.map((t) => t.id);
-  assert.deepEqual(ids, ['111']); // 110 achat, 112 change, 113 option, 114 sans date
+  assert.deepEqual(ids, ['110', '111']); // 112 change, 113 option, 114 sans date
 });
 
 test('parseStatement : date de repli (settleDate) et taux de change absent = null', () => {
@@ -108,6 +111,7 @@ test('parseStatement sans sections Trades / Cash Transactions : listes vides', (
   const s = parseStatement('<FlexQueryResponse><FlexStatements><FlexStatement accountId="U1" toDate="20261110"></FlexStatement></FlexStatements></FlexQueryResponse>');
   assert.deepEqual(s.trades, []);
   assert.deepEqual(s.cashTx, []);
+  assert.equal(s.hasTrades, false);
 });
 
 // ---------- Confirmations d'ordres du jour (Trade Confirmation Flex Query) ----------
@@ -182,4 +186,40 @@ test('applyTodayTrades retire une ligne vendue en totalité et crée la devise a
   const r = applyTodayTrades(pos, [], sell, '2026-11-11');
   assert.equal(r.positions.length, 0);
   assert.deepEqual(r.cash, [{ currency: 'GBP', amount: 21 }]);
+});
+
+test('applyTodayTrades : opérations du jour, plus-value provisoire au PRU courant (achats du jour inclus)', () => {
+  const st = parseStatement(STATEMENT); // AAPL 10 @150.25
+  const buyThenSell = [
+    { id: '1', conid: '4815747', symbol: 'NVDA', name: 'NVIDIA CORP', isin: 'US67066G1040', type: 'stock' as const,
+      date: '2026-11-12', side: 'BUY' as const, quantity: 7, price: 152.504, commission: 0.35, currency: 'USD' },
+    { id: '2', conid: '4815747', symbol: 'NVDA', name: 'NVIDIA CORP', isin: 'US67066G1040', type: 'stock' as const,
+      date: '2026-11-12', side: 'SELL' as const, quantity: 7, price: 155, commission: 0.36, currency: 'USD' },
+    { id: '3', conid: '265598', symbol: 'AAPL', name: 'APPLE INC', isin: null, type: 'stock' as const,
+      date: '2026-11-12', side: 'SELL' as const, quantity: 4, price: 210, commission: 1, currency: 'USD' },
+    { id: '4', conid: '999', symbol: 'X', name: 'X', isin: null, type: 'stock' as const,
+      date: '2026-11-10', side: 'BUY' as const, quantity: 1, price: 1, commission: 0, currency: 'USD' },
+  ];
+  const r = applyTodayTrades(st.positions, st.cash, buyThenSell, st.date!);
+  const nvdaCost = (7 * 152.504 + 0.35) / 7;
+  assert.deepEqual(r.ops.map((o) => [o.id, o.side, o.avgCost]), [['1', 'BUY', null], ['2', 'SELL', nvdaCost], ['3', 'SELL', 150.25]]);
+  assert.equal(r.ops[0].realized, null);
+  assert.ok(Math.abs(r.ops[1].realized! - ((155 - nvdaCost) * 7 - 0.36)) < 1e-9);
+  assert.ok(Math.abs(r.ops[2].realized! - ((210 - 150.25) * 4 - 1)) < 1e-9);
+  assert.equal(r.ops[1].name, 'NVIDIA CORP');
+  assert.equal(r.positions.some((p) => p.conid === '4815747'), false);
+});
+
+test('applyTodayTrades : vente d’un titre inconnu → plus-value inconnue (null)', () => {
+  const r = applyTodayTrades([], [], [{ id: '9', conid: '1', symbol: 'X', name: 'X', isin: null, type: 'stock',
+    date: '2026-11-12', side: 'SELL', quantity: 1, price: 10, commission: 0, currency: 'USD' }], '2026-11-11');
+  assert.equal(r.ops[0].realized, null);
+  assert.equal(r.ops[0].avgCost, null);
+});
+
+test('parseStatement : section Trades avec attributs ou vide → hasTrades', () => {
+  const wrap = (x: string) => `<FlexQueryResponse><FlexStatements><FlexStatement toDate="20261110">${x}</FlexStatement></FlexStatements></FlexQueryResponse>`;
+  assert.equal(parseStatement(wrap('<Trades accountId="U1"></Trades>')).hasTrades, true);
+  assert.equal(parseStatement(wrap('<Trades/>')).hasTrades, true);
+  assert.equal(parseStatement(wrap('<TradesSummary/>')).hasTrades, false);
 });

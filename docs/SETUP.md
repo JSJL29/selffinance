@@ -223,7 +223,7 @@ Si tu as un compte Interactive Brokers, ses positions et liquidités peuvent se 
    - **Format** : XML ; **Période** : *Aujourd'hui* ;
    - puis `select vault.create_secret('<query-id>', 'ibkr_confirm_query_id');`
 
-   À chaque synchro, les achats et ventes du jour sont ajoutés au relevé de la veille (quantités, PRU, espèces). Le lendemain, le relevé officiel prend le relais.
+   À chaque synchro, les achats et ventes du jour sont ajoutés au relevé de la veille (quantités, PRU, espèces) et apparaissent dans l'historique du compte, marqués **provisoire** (plus-value estimée au PRU moyen). Le lendemain, le relevé officiel les remplace (plus-value calculée par IBKR), à condition que la section **Trades** soit dans la requête Activité.
 
 Les cours des titres IBKR sont ceux de **Yahoo, en direct**, mis à jour à chaque synchro et à 19 h (la cotation est trouvée par ISIN, ou par le ticker IBKR, dans la devise du PRU). Un titre introuvable garde le cours de clôture IBKR.
 

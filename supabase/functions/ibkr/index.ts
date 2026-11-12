@@ -4,7 +4,7 @@
 // Facultatif : Vault `ibkr_confirm_query_id` = Trade Confirmation Flex Query (période « Aujourd'hui »), pour
 // ajouter les ordres du jour au relevé de la veille.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { applyTodayTrades, parseConfirmations, parseFlexResponse, parseStatement } from "./flex.ts";
+import { applyTodayTrades, parseConfirmations, parseFlexResponse, parseStatement, type TodayOp } from "./flex.ts";
 
 const env = (k: string) => {
   const v = Deno.env.get(k);
@@ -88,6 +88,7 @@ async function sync() {
 
     // Ordres du jour : ajoutés au relevé de la veille (facultatif ; un échec n'empêche pas la synchro).
     let today = 0;
+    let todayOps: TodayOp[] = [];
     let todayError: string | null = null;
     const official = new Set(st.positions.map((p) => p.conid)); // lignes du relevé : cours de clôture fiables
     const confirmQuery = (await db.rpc("ibkr_confirm_query_id")).data as string | null;
@@ -98,6 +99,7 @@ async function sync() {
         st.positions = merged.positions;
         st.cash = merged.cash;
         today = merged.applied;
+        todayOps = merged.ops;
       } catch (e) {
         todayError = `Ordres du jour non récupérés : ${e instanceof Error ? e.message : e}`;
       }
@@ -140,7 +142,7 @@ async function sync() {
       if (error) throw new Error(error.message);
     }
 
-    // Ventes et dividendes (idempotent : une opération IBKR déjà vue n'est pas recréée).
+    // Achats, ventes et dividendes (idempotent : une opération IBKR déjà vue n'est pas recréée).
     // Les liquidités IBKR viennent du relevé : cash_credit reste à 0.
     const { data: fx } = await db.from("fx_rates").select("currency, per_eur");
     const rate = new Map((fx ?? []).map((r: { currency: string; per_eur: number }) => [r.currency, Number(r.per_eur)]));
@@ -148,30 +150,53 @@ async function sync() {
     const fxPerEur = (currency: string, toBase: number | null) =>
       toBase ? 1 / toBase : currency === "EUR" ? 1 : rate.get(currency) ?? null;
     const instrumentFor = (conid: string | null) => (conid ? ids.get(`ibkr:${conid}`) ?? null : null);
+
+    // Titres absents des positions (vendus en totalité) : retrouvés par leur conid, sinon créés depuis l'ordre.
+    const traded = [...st.trades, ...todayOps];
+    const missingIds = [...new Set([...traded.map((t) => t.conid), ...st.cashTx.map((c) => c.conid ?? "")])]
+      .filter((c) => c && !ids.has(`ibkr:${c}`)).map((c) => `ibkr:${c}`);
+    if (missingIds.length) {
+      const { data: more } = await db.from("instruments").select("id, source_symbol").in("source_symbol", missingIds);
+      for (const m of more ?? []) ids.set(m.source_symbol, m.id);
+    }
+    for (const t of traded) {
+      const key = `ibkr:${t.conid}`;
+      if (!t.conid || ids.has(key)) continue;
+      const { data, error } = await db.from("instruments").insert({
+        name: t.name || t.symbol, isin: t.isin, ticker: t.symbol || null, type: t.type, currency: t.currency,
+        price_source: "ibkr", source_symbol: key,
+      }).select("id").single();
+      if (error) throw new Error(`instruments: ${error.message}`);
+      ids.set(key, data.id);
+    }
+
+    // Le relevé contient les ordres jusqu'à sa date : il remplace les opérations provisoires de ces jours-là.
+    if (st.hasTrades) {
+      const { error } = await db.from("operations").delete()
+        .eq("account_id", accountId).eq("source", "ibkr").eq("provisional", true).lte("date", date);
+      if (error) throw new Error(`operations provisoires: ${error.message}`);
+    }
+
+    // Ordres du jour : provisoires, réécrits à chaque synchro (plus-value estimée au PRU moyen).
+    if (todayOps.length) {
+      const rows = todayOps.map((o) => ({
+        account_id: accountId, instrument_id: instrumentFor(o.conid), kind: o.side === "BUY" ? "buy" : "sell",
+        date: o.date, quantity: o.quantity, price: o.price, fees: o.commission, currency: o.currency,
+        avg_cost: o.avgCost, realized: o.side === "SELL" ? o.realized : null, fx_per_eur: fxPerEur(o.currency, null),
+        source: "ibkr", external_id: `trade:${o.id}`, provisional: true, note: o.symbol || null,
+      })).filter((o) => o.fx_per_eur != null);
+      const { error } = await db.from("operations")
+        .upsert(rows, { onConflict: "source,external_id", defaultToNull: false });
+      if (error) throw new Error(`operations du jour: ${error.message}`);
+    }
+
     if (st.trades.length || st.cashTx.length) {
-      // Titres vendus en totalité : absents des positions, on les retrouve par leur conid…
-      const missing = [...new Set([...st.trades.map((t) => t.conid), ...st.cashTx.map((c) => c.conid ?? "")])]
-        .filter((c) => c && !ids.has(`ibkr:${c}`)).map((c) => `ibkr:${c}`);
-      if (missing.length) {
-        const { data: more } = await db.from("instruments").select("id, source_symbol").in("source_symbol", missing);
-        for (const m of more ?? []) ids.set(m.source_symbol, m.id);
-      }
-      // …ou on les crée à partir des infos de la vente (titre jamais vu en position).
-      for (const t of st.trades) {
-        const key = `ibkr:${t.conid}`;
-        if (!t.conid || ids.has(key)) continue;
-        const { data, error } = await db.from("instruments").insert({
-          name: t.name || t.symbol, isin: t.isin, type: t.type, currency: t.currency, price_source: "ibkr", source_symbol: key,
-        }).select("id").single();
-        if (error) throw new Error(`instruments: ${error.message}`);
-        ids.set(key, data.id);
-      }
       const ops = [
         ...st.trades.map((t) => ({
-          account_id: accountId, instrument_id: instrumentFor(t.conid), kind: "sell", date: t.date,
-          quantity: t.quantity, price: t.price, fees: t.commission, currency: t.currency,
-          realized: t.realized, fx_per_eur: fxPerEur(t.currency, t.fxRateToBase), source: "ibkr",
-          external_id: `trade:${t.id}`, note: t.symbol || null,
+          account_id: accountId, instrument_id: instrumentFor(t.conid), kind: t.side === "BUY" ? "buy" : "sell",
+          date: t.date, quantity: t.quantity, price: t.price, fees: t.commission, currency: t.currency,
+          realized: t.side === "SELL" ? t.realized : null, fx_per_eur: fxPerEur(t.currency, t.fxRateToBase),
+          source: "ibkr", external_id: `trade:${t.id}`, note: t.symbol || null,
         })),
         ...st.cashTx.map((c) => ({
           account_id: accountId, instrument_id: instrumentFor(c.conid), kind: c.type, date: c.date,
@@ -208,7 +233,7 @@ async function sync() {
 
     return {
       ok: true, date, positions: st.positions.length, cash_eur: Math.round(cashEur * 100) / 100,
-      sells: st.trades.length, dividends: st.cashTx.length, today,
+      sells: st.trades.filter((t) => t.side === "SELL").length, dividends: st.cashTx.length, today,
     };
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e).slice(0, 300);

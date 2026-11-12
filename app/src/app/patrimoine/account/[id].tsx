@@ -221,6 +221,9 @@ function PositionLine({ p, readOnly }: { p: PositionRow; readOnly?: boolean }) {
       style={({ pressed }) => [s.position, { backgroundColor: pressed ? t.border : t.card, borderColor: t.border }]}>
       <View style={s.grow}>
         <Text style={[s.name, { color: t.text }]} numberOfLines={1}>{p.instrument_name}</Text>
+        {!!p.isin && (
+          <Text style={[s.tiny, s.isin, { color: t.muted }]} numberOfLines={1} selectable>ISIN {p.isin}</Text>
+        )}
         <Text style={[s.small, { color: t.muted }]} numberOfLines={1}>{detail}</Text>
         <Text style={[s.tiny, { color: missing || p.price_error ? t.danger : t.muted }]} numberOfLines={1}>
           {missing && p.last_price != null ? 'taux de change indisponible' : priceLabel(p)}
@@ -244,6 +247,7 @@ const s = StyleSheet.create({
   big: { fontSize: 32, fontWeight: '700', fontVariant: ['tabular-nums'], marginTop: 4 },
   small: { fontSize: 13 },
   tiny: { fontSize: 11, marginTop: 2 },
+  isin: { fontVariant: ['tabular-nums'], letterSpacing: 0.3, marginTop: 0 },
   name: { fontSize: 15, fontWeight: '600' },
   amount: { fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
   right: { alignItems: 'flex-end' },

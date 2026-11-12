@@ -1,8 +1,10 @@
 // Synchro du compte IBKR via le Flex Web Service (lecture seule).
 //   POST /ibkr/sync   secret Vault (cron 7 h) ou JWT app_user (bouton « Synchroniser IBKR »)
 // Jeton : secret de fonction IBKR_FLEX_TOKEN, sinon Vault `ibkr_token`. ID de la Flex Query : Vault `ibkr_query_id`.
+// Facultatif : Vault `ibkr_confirm_query_id` = Trade Confirmation Flex Query (période « Aujourd'hui »), pour
+// ajouter les ordres du jour au relevé de la veille.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { parseFlexResponse, parseStatement } from "./flex.ts";
+import { applyTodayTrades, parseConfirmations, parseFlexResponse, parseStatement } from "./flex.ts";
 
 const env = (k: string) => {
   const v = Deno.env.get(k);
@@ -84,6 +86,23 @@ async function sync() {
     const st = parseStatement(await fetchStatement(token, queryId));
     const date = st.date ?? new Date().toISOString().slice(0, 10);
 
+    // Ordres du jour : ajoutés au relevé de la veille (facultatif ; un échec n'empêche pas la synchro).
+    let today = 0;
+    let todayError: string | null = null;
+    const official = new Set(st.positions.map((p) => p.conid)); // lignes du relevé : cours de clôture fiables
+    const confirmQuery = (await db.rpc("ibkr_confirm_query_id")).data as string | null;
+    if (confirmQuery) {
+      try {
+        const merged = applyTodayTrades(st.positions, st.cash,
+          parseConfirmations(await fetchStatement(token, confirmQuery)), date);
+        st.positions = merged.positions;
+        st.cash = merged.cash;
+        today = merged.applied;
+      } catch (e) {
+        todayError = `Ordres du jour non récupérés : ${e instanceof Error ? e.message : e}`;
+      }
+    }
+
     // Titres (une ligne par conid IBKR)
     const symbols = st.positions.map((p) => `ibkr:${p.conid}`);
     const { data: known } = symbols.length
@@ -105,7 +124,7 @@ async function sync() {
         if (error) throw new Error(error.message);
         ids.set(key, data.id);
       }
-      if (Number.isFinite(p.markPrice)) {
+      if (Number.isFinite(p.markPrice) && official.has(p.conid)) { // pas d'historique au prix d'un ordre du jour
         await db.from("instrument_prices").upsert({ instrument_id: ids.get(key), date, price: p.markPrice });
       }
     }
@@ -173,12 +192,13 @@ async function sync() {
     await db.from("manual_accounts").update({
       cash_balance: Math.round(cashEur * 100) / 100, currency: "EUR", cash_updated_at: date,
       last_synced_at: new Date().toISOString(),
-      sync_error: missing.length ? `Liquidités ignorées (taux de change absent) : ${missing.join(", ")}` : null,
+      sync_error: [missing.length ? `Liquidités ignorées (taux de change absent) : ${missing.join(", ")}` : null, todayError]
+        .filter(Boolean).join(" · ") || null,
     }).eq("id", accountId);
 
     return {
       ok: true, date, positions: st.positions.length, cash_eur: Math.round(cashEur * 100) / 100,
-      sells: st.trades.length, dividends: st.cashTx.length,
+      sells: st.trades.length, dividends: st.cashTx.length, today,
     };
   } catch (e) {
     const msg = String(e instanceof Error ? e.message : e).slice(0, 300);

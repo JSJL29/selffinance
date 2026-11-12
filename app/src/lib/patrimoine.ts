@@ -161,7 +161,7 @@ export async function saveManualAccount(a: AccountInput): Promise<string> {
 }
 
 /** Récupère positions et liquidités du compte IBKR (Flex Web Service). Prend jusqu'à ~1 min. */
-export async function syncIbkr(): Promise<{ date: string; positions: number; cash_eur: number }> {
+export async function syncIbkr(): Promise<{ date: string; positions: number; cash_eur: number; today?: number }> {
   const { data, error } = await supabase.functions.invoke('ibkr/sync', { body: {} });
   if (error) throw new Error(await functionError(error));
   return data;

@@ -109,3 +109,77 @@ test('parseStatement sans sections Trades / Cash Transactions : listes vides', (
   assert.deepEqual(s.trades, []);
   assert.deepEqual(s.cashTx, []);
 });
+
+// ---------- Confirmations d'ordres du jour (Trade Confirmation Flex Query) ----------
+import { applyTodayTrades, parseConfirmations } from './flex.ts';
+
+const CONFIRMS = `<FlexQueryResponse queryName="jour" type="TCF">
+<FlexStatements count="1">
+<FlexStatement accountId="U1234567" fromDate="20261112" toDate="20261112" period="Today" whenGenerated="20261112;160000">
+<TradeConfirms>
+<TradeConfirm accountId="U1234567" currency="EUR" assetCategory="STK" symbol="CSPX" description="ISHARES CORE S&amp;P 500" conid="75776072" isin="IE00B5BMR087" tradeID="301" tradeDate="20261112" buySell="BUY" quantity="2" price="610" commission="-1.25" levelOfDetail="EXECUTION" />
+<TradeConfirm accountId="U1234567" currency="USD" assetCategory="STK" symbol="NVDA" description="NVIDIA CORP" conid="4815747" isin="US67066G1040" tradeID="302" tradeDate="20261112" buySell="BUY" quantity="5" price="100" commission="-1" levelOfDetail="EXECUTION" />
+<TradeConfirm accountId="U1234567" currency="USD" assetCategory="STK" symbol="AAPL" description="APPLE INC" conid="265598" isin="US0378331005" tradeID="303" tradeDate="20261112" buySell="SELL" quantity="-4" price="210" commission="-1" levelOfDetail="EXECUTION" />
+<TradeConfirm accountId="U1234567" currency="USD" assetCategory="STK" symbol="AAPL" conid="265598" tradeID="" orderID="9" tradeDate="20261112" buySell="SELL" quantity="-4" price="210" commission="-1" levelOfDetail="ORDER" />
+<TradeConfirm accountId="U1234567" currency="USD" assetCategory="CASH" symbol="EUR.USD" conid="12087792" tradeID="304" tradeDate="20261112" buySell="BUY" quantity="100" price="1.08" commission="-2" levelOfDetail="EXECUTION" />
+<TradeConfirm accountId="U1234567" currency="USD" assetCategory="STK" symbol="TSLA" conid="76792991" tradeID="305" tradeDate="20261112" buySell="BUY (Ca.)" quantity="1" price="300" commission="0" levelOfDetail="EXECUTION" />
+</TradeConfirms>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>`;
+
+test('parseConfirmations garde les exécutions de titres (achats et ventes), sans ordres, change ni annulations', () => {
+  const c = parseConfirmations(CONFIRMS);
+  assert.deepEqual(c.map((x) => [x.id, x.side, x.quantity, x.price, x.commission]), [
+    ['301', 'BUY', 2, 610, 1.25],
+    ['302', 'BUY', 5, 100, 1],
+    ['303', 'SELL', 4, 210, 1],
+  ]);
+  assert.equal(c[0].name, 'ISHARES CORE S&P 500');
+  assert.equal(c[0].date, '2026-11-12');
+  assert.equal(c[1].type, 'stock');
+});
+
+test('parseConfirmations : relevé vide (aucun ordre du jour) → liste vide', () => {
+  assert.deepEqual(parseConfirmations('<FlexQueryResponse><FlexStatements count="1"><FlexStatement accountId="U1" /></FlexStatements></FlexQueryResponse>'), []);
+});
+
+test('applyTodayTrades ajoute les ordres postérieurs au relevé : quantités, PRU, nouvelles lignes, espèces', () => {
+  const st = parseStatement(STATEMENT); // relevé du 2026-11-10 : AAPL 10 @150.25, CSPX 3 @550, cash EUR 1000 / USD 250.75
+  const r = applyTodayTrades(st.positions, st.cash, parseConfirmations(CONFIRMS), st.date!);
+  assert.equal(r.applied, 3);
+  const by = new Map(r.positions.map((p) => [p.symbol, p]));
+  // CSPX : (3×550 + 2×610 + 1,25) / 5
+  assert.equal(by.get('CSPX')!.quantity, 5);
+  assert.ok(Math.abs(by.get('CSPX')!.costBasisPrice - (3 * 550 + 2 * 610 + 1.25) / 5) < 1e-9);
+  // AAPL : vente partielle, PRU inchangé
+  assert.equal(by.get('AAPL')!.quantity, 6);
+  assert.equal(by.get('AAPL')!.costBasisPrice, 150.25);
+  // NVDA : nouvelle ligne, cours = prix d'achat
+  assert.equal(by.get('NVDA')!.quantity, 5);
+  assert.ok(Math.abs(by.get('NVDA')!.costBasisPrice - (500 + 1) / 5) < 1e-9);
+  assert.equal(by.get('NVDA')!.markPrice, 100);
+  assert.equal(by.get('NVDA')!.isin, 'US67066G1040');
+  // Espèces : EUR 1000 − 1221,25 ; USD 250,75 − 501 + 839
+  const cash = new Map(r.cash.map((c) => [c.currency, c.amount]));
+  assert.ok(Math.abs(cash.get('EUR')! - (1000 - 1221.25)) < 1e-9);
+  assert.ok(Math.abs(cash.get('USD')! - (250.75 - 501 + 839)) < 1e-9);
+  // Entrées non modifiées
+  assert.equal(st.positions.find((p) => p.symbol === 'CSPX')!.quantity, 3);
+});
+
+test('applyTodayTrades ignore les ordres déjà dans le relevé (date ≤ date du relevé)', () => {
+  const st = parseStatement(STATEMENT);
+  const r = applyTodayTrades(st.positions, st.cash, parseConfirmations(CONFIRMS), '2026-11-12');
+  assert.equal(r.applied, 0);
+  assert.deepEqual(r.positions, st.positions);
+  assert.deepEqual(r.cash, st.cash);
+});
+
+test('applyTodayTrades retire une ligne vendue en totalité et crée la devise absente', () => {
+  const pos = [{ conid: '1', symbol: 'X', name: 'X', isin: null, currency: 'GBP', type: 'stock' as const, exchange: null, quantity: 2, markPrice: 10, costBasisPrice: 8 }];
+  const sell = [{ id: '9', conid: '1', symbol: 'X', name: 'X', isin: null, type: 'stock' as const, date: '2026-11-12', side: 'SELL' as const, quantity: 2, price: 11, commission: 1, currency: 'GBP' }];
+  const r = applyTodayTrades(pos, [], sell, '2026-11-11');
+  assert.equal(r.positions.length, 0);
+  assert.deepEqual(r.cash, [{ currency: 'GBP', amount: 21 }]);
+});

@@ -218,6 +218,13 @@ Si tu as un compte Interactive Brokers, ses positions et liquidités peuvent se 
    ```
 5. Dans l'app, onglet **Patrimoine → « Connecter IBKR »**. Le compte « CTO IBKR » se crée et se remplit (jusqu'à 1 min). Ensuite : synchro auto **chaque jour à 7 h** + bouton **Synchroniser** sur la page du compte.
 
+6. **Facultatif, ordres du jour.** Le relevé Activité s'arrête à la veille : un achat fait aujourd'hui n'apparaîtrait que demain. Pour le voir tout de suite, bloc **Trade Confirmation Flex Query → +** :
+   - options : **Exécution** seulement (décoche *Ordre* et *Récapitulatif des symboles*, sinon un même ordre arrive en double) ; **Tout sélectionner** pour les champs ;
+   - **Format** : XML ; **Période** : *Aujourd'hui* ;
+   - puis `select vault.create_secret('<query-id>', 'ibkr_confirm_query_id');`
+
+   À chaque synchro, les achats et ventes du jour sont ajoutés au relevé de la veille (quantités, PRU, espèces). Le lendemain, le relevé officiel prend le relais. Les cours restent ceux de la clôture de la veille (un titre acheté aujourd'hui est valorisé à son prix d'achat).
+
 > Le jeton expire au bout d'un an au plus : régénère-le chez IBKR et mets-le à jour avec `vault.update_secret` (voir l'en-tête de `secrets.example.sql`).
 
 ## 12. Installer la vraie app (APK)

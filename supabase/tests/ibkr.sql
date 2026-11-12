@@ -24,6 +24,9 @@ begin
   if has_function_privilege('authenticated', 'public.ibkr_config()', 'execute') then
     raise exception 'ibkr_config exécutable par authenticated';
   end if;
+  if has_function_privilege('authenticated', 'public.ibkr_confirm_query_id()', 'execute') then
+    raise exception 'ibkr_confirm_query_id exécutable par authenticated';
+  end if;
 end $$;
 
 select 'OK' as resultat;

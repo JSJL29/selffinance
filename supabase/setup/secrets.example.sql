@@ -19,3 +19,5 @@ select vault.create_secret('<uuid-de-l-app-enable-banking>', 'eb_app_id');
 -- Facultatif : IBKR (Flex Web Service). Supprime ces deux lignes si tu n'as pas IBKR.
 select vault.create_secret('<query-id-flex>', 'ibkr_query_id');
 select vault.create_secret('<jeton-flex>', 'ibkr_token');
+-- Facultatif : Trade Confirmation Flex Query (période « Aujourd'hui ») pour voir les ordres du jour.
+select vault.create_secret('<query-id-confirmations>', 'ibkr_confirm_query_id');

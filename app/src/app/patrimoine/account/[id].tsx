@@ -179,7 +179,8 @@ function IbkrSyncBox({ account, onDone }: { account: ManualAccount; onDone: () =
     try {
       const r = await syncIbkr();
       await onDone();
-      showAlert('IBKR synchronisé', `${r.positions} position${r.positions > 1 ? 's' : ''} · relevé du ${shortDate(r.date)}`);
+      const today = r.today ? ` + ${r.today} ordre${r.today > 1 ? 's' : ''} du jour` : '';
+      showAlert('IBKR synchronisé', `${r.positions} position${r.positions > 1 ? 's' : ''} · relevé du ${shortDate(r.date)}${today}`);
     } catch (e) {
       await onDone();
       showAlert('Synchro IBKR', e instanceof Error ? e.message : String(e));

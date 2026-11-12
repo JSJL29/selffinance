@@ -163,3 +163,85 @@ function isoDate(s: string | undefined): string | null {
   const m = s?.match(/^(\d{4})-?(\d{2})-?(\d{2})/);
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
+
+// ---------- Ordres du jour (Trade Confirmation Flex Query, période « Aujourd'hui ») ----------
+
+export type FlexConfirm = {
+  id: string;
+  conid: string;
+  symbol: string;
+  name: string;
+  isin: string | null;
+  type: FlexPosition['type'];
+  date: string;
+  side: 'BUY' | 'SELL';
+  quantity: number;     // positive
+  price: number;
+  commission: number;   // positive
+  currency: string;
+};
+
+/** Exécutions de titres du jour. Ignore les lignes « ordre », le change (CASH), les dérivés et les annulations. */
+export function parseConfirmations(xml: string): FlexConfirm[] {
+  if (!xml.includes('<FlexQueryResponse')) throw new Error('Réponse IBKR inattendue : pas de relevé Flex.');
+  return elements(xml, 'TradeConfirm')
+    .filter((t) => (t.buySell === 'BUY' || t.buySell === 'SELL')
+      && (t.levelOfDetail ?? 'EXECUTION') === 'EXECUTION' && t.tradeID && t.conid
+      && TYPES[t.assetCategory ?? ''] && isoDate(t.tradeDate)
+      && Number.isFinite(num(t.quantity)) && Number.isFinite(num(t.price ?? t.tradePrice)))
+    .map((t): FlexConfirm => ({
+      id: t.tradeID,
+      conid: t.conid,
+      symbol: t.symbol ?? '',
+      name: t.description || t.symbol || '',
+      isin: t.isin || null,
+      type: TYPES[t.assetCategory ?? ''],
+      date: isoDate(t.tradeDate)!,
+      side: t.buySell as 'BUY' | 'SELL',
+      quantity: Math.abs(num(t.quantity)),
+      price: num(t.price ?? t.tradePrice),
+      commission: Math.abs(num(t.commission ?? t.ibCommission) || 0),
+      currency: t.currency || 'USD',
+    }));
+}
+
+/**
+ * Ajoute au relevé de la veille les ordres exécutés depuis (date > `statementDate`) :
+ * achat → quantité + PRU moyen (frais inclus, comme IBKR) ; vente → quantité, PRU inchangé ;
+ * espèces débitées ou créditées dans la devise de l'ordre. Le lendemain, le relevé officiel les contient déjà.
+ */
+export function applyTodayTrades(
+  positions: FlexPosition[], cash: { currency: string; amount: number }[],
+  confirms: FlexConfirm[], statementDate: string,
+) {
+  const pos = new Map(positions.map((p) => [p.conid, { ...p }]));
+  const money = new Map(cash.map((c) => [c.currency, c.amount]));
+  let applied = 0;
+  for (const t of confirms) {
+    if (t.date <= statementDate) continue;
+    applied++;
+    const p = pos.get(t.conid);
+    const gross = t.quantity * t.price;
+    if (t.side === 'BUY') {
+      if (p) {
+        const q = p.quantity + t.quantity;
+        p.costBasisPrice = (p.quantity * p.costBasisPrice + gross + t.commission) / q;
+        p.quantity = q;
+      } else {
+        pos.set(t.conid, {
+          conid: t.conid, symbol: t.symbol, name: t.name, isin: t.isin, currency: t.currency, type: t.type,
+          exchange: null, quantity: t.quantity, markPrice: t.price, costBasisPrice: (gross + t.commission) / t.quantity,
+        });
+      }
+      money.set(t.currency, (money.get(t.currency) ?? 0) - gross - t.commission);
+    } else {
+      if (p) p.quantity -= t.quantity;
+      money.set(t.currency, (money.get(t.currency) ?? 0) + gross - t.commission);
+    }
+  }
+  return {
+    applied,
+    positions: [...pos.values()].filter((p) => Math.abs(p.quantity) > 1e-9),
+    cash: [...money].map(([currency, amount]) => ({ currency, amount })),
+  };
+}

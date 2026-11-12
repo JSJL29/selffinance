@@ -223,7 +223,9 @@ Si tu as un compte Interactive Brokers, ses positions et liquidités peuvent se 
    - **Format** : XML ; **Période** : *Aujourd'hui* ;
    - puis `select vault.create_secret('<query-id>', 'ibkr_confirm_query_id');`
 
-   À chaque synchro, les achats et ventes du jour sont ajoutés au relevé de la veille (quantités, PRU, espèces). Le lendemain, le relevé officiel prend le relais. Les cours restent ceux de la clôture de la veille (un titre acheté aujourd'hui est valorisé à son prix d'achat).
+   À chaque synchro, les achats et ventes du jour sont ajoutés au relevé de la veille (quantités, PRU, espèces). Le lendemain, le relevé officiel prend le relais.
+
+Les cours des titres IBKR sont ceux de **Yahoo, en direct**, mis à jour à chaque synchro et à 19 h (la cotation est trouvée par ISIN, ou par le ticker IBKR, dans la devise du PRU). Un titre introuvable garde le cours de clôture IBKR.
 
 > Le jeton expire au bout d'un an au plus : régénère-le chez IBKR et mets-le à jour avec `vault.update_secret` (voir l'en-tête de `secrets.example.sql`).
 

@@ -112,7 +112,7 @@ selffinance/
 
 ```bash
 cd app && npm test                         # calculs et formatage
-node --test supabase/functions/ibkr/       # lecture des relevés IBKR
+node --test supabase/functions/ibkr/ supabase/functions/quotes/   # relevés IBKR, choix des cotations
 ```
 
 Les fichiers de `supabase/tests/` se lancent dans le SQL Editor de Supabase : ils annulent tout ce qu'ils créent et renvoient `OK`.

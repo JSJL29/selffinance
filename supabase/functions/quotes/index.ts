@@ -5,6 +5,7 @@
 // Les sources de cours sont derrière l'interface PriceProvider : on peut remplacer Yahoo
 // (API non officielle) par un fournisseur payant sans toucher au reste.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { pickListing } from "./listing.ts";
 
 const env = (k: string) => {
   const v = Deno.env.get(k);
@@ -134,8 +135,33 @@ async function isAppUser(req: Request) {
   return !!data;
 }
 
+/**
+ * Titre IBKR : cours Yahoo en direct (le relevé IBKR ne donne que la clôture de la veille).
+ * Cotation trouvée par ISIN dans la devise du PRU, retenue dans `quote_symbol`. Introuvable :
+ * on garde le cours IBKR, sans erreur affichée.
+ */
+async function refreshIbkr(i: Json): Promise<boolean> {
+  let symbol: string | null = i.quote_symbol;
+  if (!symbol) {
+    if (i.isin) symbol = pickListing(await yahoo.search(i.isin), i.currency);
+    // ISIN inconnu de Yahoo (ex. Alphabet) : ticker IBKR, seulement si Yahoo a ce symbole exact.
+    if (!symbol && i.ticker) symbol = pickListing(await yahoo.search(i.ticker), i.currency, i.ticker);
+    if (!symbol) return false;
+    await db.from("instruments").update({ quote_symbol: symbol }).eq("id", i.id);
+  }
+  const qt = await yahoo.quote(symbol);
+  if (qt.currency !== i.currency) return false; // jamais un cours dans une autre devise que le PRU
+  const { error } = await db.from("instruments").update({
+    last_price: qt.price, last_price_date: qt.date, price_updated_at: new Date().toISOString(),
+  }).eq("id", i.id);
+  if (error) throw new Error(error.message);
+  await db.from("instrument_prices").upsert({ instrument_id: i.id, date: qt.date, price: qt.price });
+  return true;
+}
+
 async function refresh(ids: string[] | null) {
-  let q = db.from("instruments").select("id, price_source, source_symbol").in("price_source", ["yahoo", "amf"]);
+  let q = db.from("instruments").select("id, price_source, source_symbol, quote_symbol, ticker, isin, currency")
+    .in("price_source", ["yahoo", "amf", "ibkr"]);
   if (ids) q = q.in("id", ids);
   const { data: list, error } = await q;
   if (error) throw new Error(error.message);
@@ -143,6 +169,10 @@ async function refresh(ids: string[] | null) {
   const errors: Record<string, string> = {};
   let updated = 0;
   await Promise.all((list ?? []).map(async (i: Json) => {
+    if (i.price_source === "ibkr") {
+      if (await refreshIbkr(i).catch(() => false)) updated++;
+      return;
+    }
     try {
       if (!i.source_symbol) throw new Error("symbole manquant");
       const qt = await providers[i.price_source as Source].quote(i.source_symbol);

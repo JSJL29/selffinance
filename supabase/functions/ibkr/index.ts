@@ -112,8 +112,8 @@ async function sync() {
     for (const p of st.positions) {
       const key = `ibkr:${p.conid}`;
       const fields = {
-        name: p.name, isin: p.isin, type: p.type, currency: p.currency, price_source: "ibkr", source_symbol: key,
-        last_price: Number.isFinite(p.markPrice) ? p.markPrice : null, last_price_date: date,
+        name: p.name, isin: p.isin, ticker: p.symbol || null, type: p.type, currency: p.currency,
+        price_source: "ibkr", source_symbol: key, last_price: Number.isFinite(p.markPrice) ? p.markPrice : null, last_price_date: date,
         price_updated_at: new Date().toISOString(), price_error: null,
       };
       if (ids.has(key)) {
@@ -195,6 +195,16 @@ async function sync() {
       sync_error: [missing.length ? `Liquidités ignorées (taux de change absent) : ${missing.join(", ")}` : null, todayError]
         .filter(Boolean).join(" · ") || null,
     }).eq("id", accountId);
+
+    // Cours en direct (fonction `quotes`, Yahoo) : le relevé ne donne que la clôture de la veille.
+    const held = [...new Set(st.positions.map((p) => ids.get(`ibkr:${p.conid}`)).filter(Boolean))];
+    if (held.length) {
+      await fetch(`${env("SUPABASE_URL")}/functions/v1/quotes/refresh`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${syncSecret}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: held }),
+      }).catch(() => undefined); // échec : on garde le cours IBKR
+    }
 
     return {
       ok: true, date, positions: st.positions.length, cash_eur: Math.round(cashEur * 100) / 100,

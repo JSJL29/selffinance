@@ -190,6 +190,19 @@ export async function refreshHeldQuotes() {
   if (error) throw new Error(await functionError(error));
 }
 
+/** Heure du cours le plus récent parmi les titres cotés détenus (d'un compte, ou de tous). */
+export async function fetchQuotesUpdatedAt(accountId?: string): Promise<string | null> {
+  let q = supabase.from('positions').select('instruments!inner(price_updated_at, price_source)')
+    .neq('quantity', 0).neq('instruments.price_source', 'manual');
+  if (accountId) q = q.eq('account_id', accountId);
+  const { data, error } = await q;
+  if (error) throw error;
+  const times = (data ?? [])
+    .map((p) => (p.instruments as unknown as { price_updated_at: string | null }).price_updated_at)
+    .filter((x): x is string => !!x);
+  return times.length ? times.reduce((a, b) => (a > b ? a : b)) : null;
+}
+
 export type ManualInstrument = { name: string; type: InstrumentType; currency?: string; price: number };
 
 /**

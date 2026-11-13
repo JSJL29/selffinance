@@ -4,9 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchAccounts, useLoad } from '@/lib/data';
-import { ManualAccount, envelopeLabel, fetchManualAccounts, refreshHeldQuotes, syncIbkr } from '@/lib/patrimoine';
+import { ManualAccount, envelopeLabel, fetchManualAccounts, fetchQuotesUpdatedAt, refreshHeldQuotes, syncIbkr } from '@/lib/patrimoine';
 import { netWorth } from '@/lib/networth';
-import { money, pct } from '@/lib/format';
+import { ago, money, pct } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
 import { showAlert } from '@/lib/dialog';
@@ -16,11 +16,12 @@ export default function Patrimoine() {
   const t = useTheme();
   const bank = useLoad(fetchAccounts, []);
   const manual = useLoad(fetchManualAccounts, []);
+  const quotedAt = useLoad(() => fetchQuotesUpdatedAt(), []);
   const [quoting, setQuoting] = useState(false);
 
   // Cours en direct à l'ouverture de l'onglet, puis recalcul des montants.
   useEffect(() => {
-    refreshHeldQuotes().then(() => manual.reload(), () => undefined);
+    refreshHeldQuotes().then(() => Promise.all([manual.reload(), quotedAt.reload()]), () => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -36,7 +37,7 @@ export default function Patrimoine() {
     setQuoting(true);
     await refreshHeldQuotes().catch(() => undefined); // cours en direct ; en cas d'échec on garde les derniers
     setQuoting(false);
-    await Promise.all([bank.refresh(), manual.refresh()]);
+    await Promise.all([bank.refresh(), manual.refresh(), quotedAt.refresh()]);
   };
   const pnlColor = nw.pnl > 0 ? t.success : nw.pnl < 0 ? t.danger : t.muted;
 
@@ -52,6 +53,9 @@ export default function Patrimoine() {
             <Text style={[s.small, { color: pnlColor }]}>
               Placements {money(nw.pnl, 'EUR', { sign: true })} ({pct(nw.pnlPct)})
             </Text>
+          )}
+          {quotedAt.data && (
+            <Text style={[s.small, { color: t.muted }]}>Cours mis à jour {ago(quotedAt.data)}</Text>
           )}
           <Pressable onPress={() => router.push('/patrimoine/tax')} hitSlop={8} style={s.taxLink}>
             <Ionicons name="receipt-outline" size={15} color={t.primary} />

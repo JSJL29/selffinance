@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLoad } from '@/lib/data';
 import {
   ManualAccount, Operation, PositionRow, deleteOperation, envelopeLabel, fetchManualAccount, fetchOperations,
-  fetchPositions, refreshHeldQuotes, syncIbkr,
+  fetchPositions, fetchQuotesUpdatedAt, refreshHeldQuotes, syncIbkr,
 } from '@/lib/patrimoine';
 import { ago, frDate, money, pct, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
@@ -21,11 +21,12 @@ export default function ManualAccountDetail() {
   const account = useLoad(() => fetchManualAccount(id), [id]);
   const positions = useLoad(() => fetchPositions(id), [id]);
   const operations = useLoad(() => fetchOperations(id), [id]);
+  const quotedAt = useLoad(() => fetchQuotesUpdatedAt(id), [id]);
   const [quoting, setQuoting] = useState(false);
 
   if (!account.data && !account.error) return <Loading />;
   const a = account.data;
-  const reload = async () => { await Promise.all([account.refresh(), positions.refresh(), operations.refresh()]); };
+  const reload = async () => { await Promise.all([account.refresh(), positions.refresh(), operations.refresh(), quotedAt.refresh()]); };
   const refresh = async () => {
     if (a?.kind === 'investment') {
       setQuoting(true);
@@ -61,6 +62,9 @@ export default function ManualAccountDetail() {
               <Text style={[s.small, { color }]}>
                 {money(a.pnl_eur, 'EUR', { sign: true })} ({pct(a.pnl_pct)}) sur {money(a.invested_eur)} investis
               </Text>
+            )}
+            {a.kind === 'investment' && quotedAt.data && (
+              <Text style={[s.small, { color: t.muted }]}>Cours mis à jour {ago(quotedAt.data)} · tire pour rafraîchir</Text>
             )}
 
             {synced && <IbkrSyncBox account={a} onDone={reload} />}

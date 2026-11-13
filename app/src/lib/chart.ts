@@ -30,6 +30,14 @@ export function scale([d0, d1]: [number, number], [r0, r1]: [number, number]): (
   return (v) => r0 + (v - d0) * k;
 }
 
+/** Montant court pour les graduations : « 500 € », « 2,5 k€ », « 1,5 M€ ». */
+export function compactEuro(v: number): string {
+  const a = Math.abs(v);
+  const [x, unit] = a >= 1e6 ? [a / 1e6, 'M€'] : a >= 1000 ? [a / 1000, 'k€'] : [a, '€'];
+  const s = String(Math.round(x * 10) / 10).replace('.', ',');
+  return `${v < 0 ? '−' : ''}${s} ${unit}`;
+}
+
 const n = (v: number) => String(Math.round(v * 10) / 10);
 
 /** Tracé SVG ; un point sans valeur coupe le trait (trou, jamais un zéro). */

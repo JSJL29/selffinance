@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { linePath, nearestIndex, niceTicks, scale, yDomain } from '../src/lib/chart.ts';
+import { compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '../src/lib/chart.ts';
+
+test('compactEuro : graduations courtes', () => {
+  assert.equal(compactEuro(40000), '40 k€');
+  assert.equal(compactEuro(2500), '2,5 k€');
+  assert.equal(compactEuro(-1000), '−1 k€');
+  assert.equal(compactEuro(500), '500 €');
+  assert.equal(compactEuro(1500000), '1,5 M€');
+  assert.equal(compactEuro(0), '0 €');
+});
 
 test('yDomain : vide, constant, avec marge et négatifs', () => {
   assert.deepEqual(yDomain([]), [0, 1]);

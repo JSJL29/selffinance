@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useFocusEffect } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
-import { type BankLogoEntry, logoFor } from './logos';
+import { makeLogoLookup } from './logos';
 import { isoDay } from './format';
 
 export type AccountRow = {
@@ -191,26 +191,37 @@ export async function functionError(error: unknown): Promise<string> {
   return body?.error ?? (error as Error).message ?? String(error);
 }
 
-// Logos officiels des banques : liste Enable Banking chargée une fois par lancement, partagée par toutes
-// les pastilles. Échec (hors ligne…) → liste vide, les pastilles à initiales restent ; nouvel essai plus tard.
-let logosPromise: Promise<BankLogoEntry[]> | null = null;
-export function loadBankLogos(): Promise<BankLogoEntry[]> {
-  logosPromise ??= fetchAspsps('FR').then(
-    (list) => list.map((a) => ({ name: a.name, logo: a.logo })),
-    () => { logosPromise = null; return []; },
-  );
-  return logosPromise;
+// Logos officiels des banques : liste Enable Banking chargée une fois, partagée par toutes les pastilles
+// (normalisée une seule fois). Échec (hors ligne…) → pastilles à initiales, nouvel essai au plus toutes
+// les 2 minutes ; les pastilles déjà affichées se mettent à jour quand la liste arrive.
+let logoLookup: ((name: string) => string | null) | null = null;
+let logosLoading = false;
+let logosFailedAt = 0;
+const LOGO_RETRY_MS = 2 * 60_000;
+const logoListeners = new Set<() => void>();
+
+function ensureBankLogos() {
+  if (logoLookup || logosLoading || Date.now() - logosFailedAt < LOGO_RETRY_MS) return;
+  logosLoading = true;
+  fetchAspsps('FR').then(
+    (list) => {
+      logoLookup = makeLogoLookup(list.map((a) => ({ name: a.name, logo: a.logo })));
+      logoListeners.forEach((notify) => notify());
+    },
+    () => { logosFailedAt = Date.now(); },
+  ).finally(() => { logosLoading = false; });
+}
+
+function subscribeBankLogos(notify: () => void) {
+  logoListeners.add(notify);
+  ensureBankLogos();
+  return () => { logoListeners.delete(notify); };
 }
 
 /** Logo officiel de la banque (null tant qu'il n'est pas connu, ou s'il n'existe pas). */
 export function useBankLogo(name: string): string | null {
-  const [list, setList] = useState<BankLogoEntry[] | null>(null);
-  useEffect(() => {
-    let alive = true;
-    loadBankLogos().then((l) => { if (alive) setList(l); });
-    return () => { alive = false; };
-  }, []);
-  return useMemo(() => (list ? logoFor(name, list) : null), [list, name]);
+  const lookup = useSyncExternalStore(subscribeBankLogos, () => logoLookup);
+  return lookup ? lookup(name) : null;
 }
 
 export async function fetchAspsps(country = 'FR'): Promise<Aspsp[]> {

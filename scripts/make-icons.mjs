@@ -22,8 +22,7 @@ function glyph({ mono = false, scale = 1 } = {}) {
   const t = scale === 1 ? '' : ` transform="translate(32 32) scale(${scale}) translate(-32 -32)"`;
   return `<g${t}>
     <g fill="none" stroke="${stroke}" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M48 20 H18.5 a6 6 0 0 0 0 12 h4 a6 6 0 0 1 0 12 H11"/>
-      <path d="M37 20 V44"/><path d="M37 32 H45"/>
+      <path d="M48 20 H18.5 a6 6 0 0 0 0 12 h4 a6 6 0 0 1 0 12 H11 M37 20 V44 M37 32 H45"/>
     </g>
     <circle cx="52.5" cy="20" r="4" fill="${dot}"/>
   </g>`;
@@ -38,12 +37,14 @@ const svg = (body, bg = true) =>
 const icon = svg(glyph());
 writeFileSync(join(root, 'assets', 'icon.svg'), icon + '\n');
 
-// Icône adaptative Android : seul le cercle central (~66 %) est toujours visible → motif réduit à 80 %.
+// Icône adaptative Android : zone sûre = 61 % du demi-côté (66/108), masque rond à 67 %.
+// À 0,7, le point violet (le plus éloigné du centre) reste à ~0,61 : jamais rogné.
+const ADAPTIVE = 0.7;
 const outputs = [
   ['icon.png', icon, 1024],
-  ['android-icon-foreground.png', svg(glyph({ scale: 0.8 }), false), 1024],
+  ['android-icon-foreground.png', svg(glyph({ scale: ADAPTIVE }), false), 1024],
   ['android-icon-background.png', svg(''), 1024],
-  ['android-icon-monochrome.png', svg(glyph({ mono: true, scale: 0.8 }), false), 1024],
+  ['android-icon-monochrome.png', svg(glyph({ mono: true, scale: ADAPTIVE }), false), 1024],
   ['favicon.png', icon, 48],
   ['splash-icon.png', svg(glyph(), false), 1024],
 ];

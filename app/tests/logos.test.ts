@@ -1,6 +1,27 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { logoFor, normalizeBank } from '../src/lib/logos.ts';
+import { logoFor, makeLogoLookup, normalizeBank } from '../src/lib/logos.ts';
+
+test('logoFor : un mot générique seul ne donne pas le logo d’une autre banque', () => {
+  const l = [{ name: 'Crédit Agricole Ile-de-France', logo: 'https://x/ca.png' }, { name: 'Banque Populaire', logo: 'https://x/bp.png' }];
+  assert.equal(logoFor('Crédit', l), null);
+  assert.equal(logoFor('Banque', l), null);
+  assert.equal(logoFor('Crédit Agricole', l), 'https://x/ca.png', 'mots entiers en tête : ok');
+});
+
+test('logoFor : préfixe seulement sur des mots entiers', () => {
+  const l = [{ name: 'Crédit Mutuel de Bretagne', logo: 'https://x/cmb.png' }, { name: 'Boursorama', logo: 'https://x/bourso.png' }];
+  assert.equal(logoFor('Crédit Mutuel', l), 'https://x/cmb.png');
+  assert.equal(logoFor('Bourso', l), null, 'un morceau de mot ne suffit pas');
+});
+
+test('makeLogoLookup : mêmes réponses que logoFor, liste normalisée une seule fois', () => {
+  const look = makeLogoLookup(list);
+  assert.equal(look('Societe generale'), 'https://x/sg.png');
+  assert.equal(look('Fortuneo'), 'https://x/fortuneo.png');
+  assert.equal(look('CE'), null);
+  assert.equal(look('Fortuneo'), 'https://x/fortuneo.png', 'réponse mise en cache');
+});
 
 const list = [
   { name: 'Société Générale', logo: 'https://x/sg.png' },

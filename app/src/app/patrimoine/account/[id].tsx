@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLoad } from '@/lib/data';
 import {
-  ManualAccount, Operation, PositionRow, deleteOperation, envelopeLabel, fetchManualAccount, fetchOperations,
+  ManualAccount, Operation, PositionRow, currentCash, deleteOperation, envelopeLabel, fetchManualAccount, fetchOperations,
   fetchPositions, fetchQuotesUpdatedAt, fetchWealthHistory, refreshHeldQuotes, syncIbkr,
 } from '@/lib/patrimoine';
 import { ago, frDate, isoDay, money, pct, shortDate } from '@/lib/format';
@@ -97,8 +97,16 @@ export default function ManualAccountDetail() {
                   {synced ? `Relevé IBKR${a.cash_updated_at ? ` du ${shortDate(a.cash_updated_at)}` : ''}, converti en €`
                     : a.cash_updated_at ? `Mis à jour le ${shortDate(a.cash_updated_at)}` : 'Saisi à la main'}
                 </Text>
+                {!synced && a.transfers == null && (
+                  <Text style={[s.small, { color: t.danger }]}>Virements non comptés : taux de change manquant</Text>
+                )}
+                {!synced && !!a.transfers && (
+                  <Text style={[s.small, { color: t.muted }]}>
+                    dont {money(a.transfers, a.currency, { sign: true })} de virements depuis le {shortDate(a.transfers_from)}
+                  </Text>
+                )}
               </View>
-              <Text style={[s.amount, { color: t.text }]}>{money(a.cash_balance, a.currency)}</Text>
+              <Text style={[s.amount, { color: t.text }]}>{money(currentCash(a), a.currency)}</Text>
               {!synced && <Ionicons name="create-outline" size={18} color={t.muted} />}
             </Pressable>
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canEditPrice, mergePosition } from '../src/lib/positions.ts';
+import { canEditPrice, mergePosition, currentCash } from '../src/lib/positions.ts';
 
 test('canEditPrice : titre manuel → oui', () => {
   assert.equal(canEditPrice({ price_source: 'manual', last_price: 10, price_error: null }), true);
@@ -25,4 +25,11 @@ test('mergePosition additionne les quantités et calcule le PRU moyen pondéré'
 test('mergePosition sur une position vide reprend l’achat', () => {
   const m = mergePosition({ quantity: 0, avg_cost: 0 }, { quantity: 3, avg_cost: 10 });
   assert.deepEqual(m, { quantity: 3, avg_cost: 10 });
+});
+
+test('currentCash : solde saisi + virements depuis, taux manquant ignoré', () => {
+  assert.equal(currentCash({ cash_balance: 1000, transfers: 400.1 }), 1400.1);
+  assert.equal(currentCash({ cash_balance: 1000, transfers: -1000 }), 0);
+  assert.equal(currentCash({ cash_balance: 0.1, transfers: 0.2 }), 0.3);
+  assert.equal(currentCash({ cash_balance: 250, transfers: null }), 250);
 });

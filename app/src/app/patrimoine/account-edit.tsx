@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLoad } from '@/lib/data';
 import {
-  ENVELOPES, Envelope, ManualAccount, deleteManualAccount, envelopeLabel, fetchManualAccount, saveManualAccount,
+  ENVELOPES, Envelope, ManualAccount, currentCash, deleteManualAccount, envelopeLabel, fetchManualAccount, saveManualAccount,
 } from '@/lib/patrimoine';
 import { parseAmount } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
@@ -41,7 +41,9 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
   const [envelope, setEnvelope] = useState<Envelope>(account?.envelope ?? 'livret_a');
   const [name, setName] = useState(account?.name ?? '');
   const [institution, setInstitution] = useState(account?.institution ?? '');
-  const [cash, setCash] = useState(account ? String(account.cash_balance).replace('.', ',') : '');
+  // Solde virements compris : enregistrer repart de cette valeur (pas de virement perdu ni compté deux fois).
+  const [cash, setCash] = useState(account ? String(currentCash(account)).replace('.', ',') : '');
+  const [pattern, setPattern] = useState(account?.transfer_pattern ?? '');
   const [currency, setCurrency] = useState(account?.currency ?? 'EUR');
   const [busy, setBusy] = useState(false);
 
@@ -56,6 +58,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
       const newId = await saveManualAccount({
         id: account?.id, name: finalName, institution, kind, envelope, cash_balance: amount ?? 0,
         currency: account?.sync_source ? account.currency : currency,
+        transfer_pattern: account?.sync_source ? null : pattern,
       });
       if (account) goBack({ pathname: '/patrimoine/account/[id]', params: { id: account.id } });
       else router.replace({ pathname: '/patrimoine/account/[id]', params: { id: newId } });
@@ -107,6 +110,11 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
                 label={`${kind === 'savings' ? 'Solde' : 'Liquidités'} (${currencySymbol(currency)})`}
                 hint={kind === 'savings' ? undefined : 'Argent non investi sur le compte. Les titres s’ajoutent ensuite.'}
                 value={cash} onChangeText={setCash} keyboardType="decimal-pad" placeholder="0,00"
+              />
+              <Field
+                label="Libellé des virements (facultatif)"
+                hint="Texte présent dans le libellé bancaire des virements vers ou depuis ce compte (ex. VIR S/ PEA). Ils s'ajoutent ou se retirent du solde automatiquement."
+                value={pattern} onChangeText={setPattern} autoCapitalize="characters" placeholder="Ex. LIVRET A"
               />
             </>
           )}

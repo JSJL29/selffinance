@@ -7,6 +7,14 @@ export function canEditPrice(p: PriceState): boolean {
   return p.price_source === 'manual' || p.last_price == null || !!p.price_error;
 }
 
+/**
+ * Solde d'un compte manuel, virements depuis la dernière saisie compris (au centime).
+ * Taux de change manquant (`transfers` null) : solde saisi seul, l'écran signale le manque.
+ */
+export function currentCash(a: { cash_balance: number; transfers: number | null }): number {
+  return Math.round((a.cash_balance + (a.transfers ?? 0)) * 100) / 100;
+}
+
 type Lot = { quantity: number; avg_cost: number };
 
 /** Ajoute un achat à une position existante : quantités additionnées, PRU moyen pondéré (4 décimales). */

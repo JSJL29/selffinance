@@ -76,6 +76,12 @@ export type ManualAccount = {
   sync_source: 'ibkr' | null;
   last_synced_at: string | null;
   sync_error: string | null;
+  /** Texte cherché dans les opérations bancaires : virements vers / depuis ce compte. */
+  transfer_pattern: string | null;
+  /** Virements comptés à partir du lendemain de ce jour (jour de la dernière saisie du solde). */
+  transfers_from: string;
+  /** Somme des virements depuis `transfers_from`, dans la devise du compte (null : taux de change manquant). */
+  transfers: number | null;
   cash_eur: number | null;
   positions_value_eur: number;
   invested_eur: number;
@@ -125,7 +131,9 @@ function nums<T>(row: Record<string, unknown>, keys: string[]): T {
   return out as T;
 }
 
-const ACCOUNT_NUMS = ['cash_balance', 'cash_eur', 'positions_value_eur', 'invested_eur', 'pnl_eur', 'pnl_pct', 'value_eur'];
+const ACCOUNT_NUMS = ['cash_balance', 'cash_eur', 'positions_value_eur', 'invested_eur', 'pnl_eur', 'pnl_pct', 'value_eur', 'transfers'];
+
+export { currentCash } from './positions';
 const POSITION_NUMS = ['quantity', 'avg_cost', 'last_price', 'value_eur', 'invested_eur', 'pnl_eur', 'pnl_pct'];
 
 export async function fetchManualAccounts(): Promise<ManualAccount[]> {
@@ -174,6 +182,7 @@ export type AccountInput = {
   envelope: Envelope;
   cash_balance: number;
   currency?: string;
+  transfer_pattern?: string | null;
 };
 
 /** Crée ou met à jour un compte manuel ; renvoie son id. */
@@ -186,6 +195,9 @@ export async function saveManualAccount(a: AccountInput): Promise<string> {
     cash_balance: a.cash_balance,
     currency: a.currency ?? 'EUR',
     cash_updated_at: isoDay(new Date()),
+    transfer_pattern: a.transfer_pattern?.trim() || null,
+    // Le solde saisi inclut les virements déjà arrivés : on ne compte que ceux d'après.
+    transfers_from: isoDay(new Date()),
   };
   const q = a.id
     ? supabase.from('manual_accounts').update(row).eq('id', a.id).select('id').single()

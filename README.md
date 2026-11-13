@@ -26,6 +26,8 @@ Une app perso Android qui regroupe comptes bancaires, épargne et placements, av
 | 🏦 | **Comptes** | Tous les comptes bancaires, leur solde et le total. Bouton de synchro, réglages des synchros automatiques, ajout et reconnexion des banques. |
 | 📄 | **Détail d'un compte** | Les opérations jour par jour, l'état de l'accès bancaire, et un solde saisi à la main si la banque n'en donne pas. |
 | 🥧 | **Patrimoine** | Total général (banques + épargne + placements) et plus-value globale. Livrets, PEA, CTO, assurance-vie, PER, épargne salariale, IBKR. Ventes, dividendes et **bilan fiscal** de l'année (impôt estimé sur les CTO). |
+| 📈 | **Courbes** | Évolution du patrimoine total et de chaque compte (1S, 1M, 3M, 1A, Tout), d'après une photo prise chaque soir à 22 h. Pour un placement : valeur et montant investi. |
+| 🏷️ | **Logos** | Logos officiels des banques (fournis par Enable Banking), icône et écran de chargement de l'app. |
 | 🔀 | **Transactions** | Toutes les banques mélangées, mois par mois, avec un filtre par banque. Les dépenses sont totalisées **hors virements internes**. |
 
 Les virements entre mes propres comptes (SG → IBKR, SG → Revolut…) sont détectés et grisés : le même argent n'est jamais compté deux fois.
@@ -65,6 +67,8 @@ flowchart LR
 - L'app ne parle qu'à Supabase, avec le compte du propriétaire ; chaque table est protégée par des règles d'accès (RLS).
 - Les tâches automatiques tournent dans la base (`pg_cron`), même quand le téléphone et le PC sont éteints.
 
+**📐 Tous les schémas (flux de synchro, connexion d'une banque, modèle de données, sécurité, tests et livraison) : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).**
+
 ## 🚀 Installer ta propre SelfFinance
 
 > ⚠️ **Ne partage pas ton APK.** Un APK contient l'adresse de **ta** base Supabase : la personne qui l'installe se connecterait à ta base (sans voir tes données, réservées au propriétaire, mais ce n'est pas son app). **Chacun crée sa propre copie** : sa base Supabase, son app Enable Banking, son projet Expo et son APK. Rien n'est partagé, et ça reste gratuit.
@@ -84,7 +88,9 @@ Tout est expliqué de A à Z dans **[docs/SETUP.md](docs/SETUP.md)** (environ 1 
 - [x] Patrimoine : comptes manuels, positions, cours, plus-values, € ou $
 - [x] IBKR via le Flex Web Service
 - [x] Ventes, dividendes et bilan fiscal annuel estimé (IBKR automatique, le reste manuel)
-- [ ] Historique des achats
+- [x] Historique des achats (IBKR, ordres du jour provisoires)
+- [x] Courbe du patrimoine et de chaque compte (photo quotidienne)
+- [x] Logos des banques, icône et écran de chargement
 - [ ] Catégorisation des dépenses, abonnements, budgets
 - [ ] Version iPhone
 
@@ -94,7 +100,8 @@ Tout est expliqué de A à Z dans **[docs/SETUP.md](docs/SETUP.md)** (environ 1 
 selffinance/
 ├── app/                      app Expo (Expo Router)
 │   ├── src/app/              écrans : (tabs)/, account/, patrimoine/, settings, add-bank…
-│   ├── src/lib/              accès aux données, calculs, formatage
+│   ├── src/lib/              accès aux données, calculs (patrimoine, courbes, logos), formatage
+│   ├── src/components/       UI partagée (courbe, pastilles de banque…)
 │   └── tests/                tests unitaires (npm test)
 ├── supabase/
 │   ├── migrations/           schéma, sécurité, tâches automatiques
@@ -103,16 +110,19 @@ selffinance/
 │   └── tests/                vérifications SQL
 ├── docs/
 │   ├── SETUP.md              guide d'installation complet
+│   ├── ARCHITECTURE.md       schémas : flux, modèle de données, sécurité, livraison
 │   ├── open-banking.md       recherche, couverture des banques, décisions
 │   └── superpowers/          conception et plans
-└── scripts/eb.ps1            client Enable Banking en ligne de commande (tests, facultatif)
+└── scripts/
+    ├── make-icons.mjs        icône et écran de chargement (depuis le logo SF)
+    └── eb.ps1                client Enable Banking en ligne de commande (tests, facultatif)
 ```
 
 ## 🧪 Tests
 
 ```bash
-cd app && npm test                         # calculs et formatage
-node --test supabase/functions/ibkr/ supabase/functions/quotes/   # relevés IBKR, choix des cotations
+cd app && npm test                         # calculs, courbes, logos, formatage
+node --test supabase/functions/            # relevés IBKR, cotations, période de synchro bancaire
 ```
 
 Les fichiers de `supabase/tests/` se lancent dans le SQL Editor de Supabase : ils annulent tout ce qu'ils créent et renvoient `OK`.

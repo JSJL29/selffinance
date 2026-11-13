@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupByDay, pairTransfers } from '../src/lib/transfers.ts';
+import { groupByDay, pairTransfers, withoutInternal } from '../src/lib/transfers.ts';
 import type { Tx } from '../src/lib/data.ts';
 
 let n = 0;
@@ -69,4 +69,16 @@ test('un virement vers un compte manuel n’est jamais apparié avec un autre vi
   const sg = tx('2026-11-05', 'sg', 'SG', -500, { internal_label: 'Fortuneo' });
   const ft = tx('2026-11-05', 'ft', 'Fortuneo', 500, { internal_label: 'Virement entre comptes' });
   assert.deepEqual(kinds(pairTransfers([sg, ft], new Set(['PEA Fortuneo']))), ['transfer']);
+});
+
+test('withoutInternal : retire les virements internes et les paires, garde le reste', () => {
+  const out = tx('2026-11-05', 'sg', 'SG', -1000);
+  const inn = tx('2026-11-05', 'bnp', 'BNP', 1000);
+  const toPea = tx('2026-11-05', 'sg', 'SG', -500, { internal_label: 'PEA Fortuneo' });
+  const cb = tx('2026-11-05', 'sg', 'SG', -12, { is_internal: false });
+  const items = pairTransfers([out, inn, toPea, cb]);
+  assert.deepEqual(kinds(items), ['transfer', 'tx', 'tx']);
+  const kept = withoutInternal(items);
+  assert.equal(kept.length, 1);
+  assert.ok(kept[0].kind === 'tx' && kept[0].tx === cb);
 });

@@ -3,11 +3,16 @@ import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, Text, V
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchMonthTx, useLoad } from '@/lib/data';
-import { type ListItem, groupByDay, pairTransfers } from '@/lib/transfers';
+import { type ListItem, groupByDay, pairTransfers, withoutInternal } from '@/lib/transfers';
 import { fetchManualAccounts } from '@/lib/patrimoine';
 import { money, monthLabel } from '@/lib/format';
 import { bankShortName, useTheme } from '@/lib/theme';
 import { Chip, DayHeader, Empty, ErrorBox, Loading, TransferRow, TxRow } from '@/components/ui';
+
+// Choix « masquer les virements internes », gardé sur l'appareil (stockage local, peut être indisponible).
+const HIDE_KEY = 'transactions.hideInternal';
+const readHide = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
+const writeHide = (v: boolean) => { try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } catch { /* sans effet */ } };
 
 const itemKey = (i: ListItem) => (i.kind === 'tx' ? String(i.tx.id) : `v${i.out.id}-${i.in.id}`);
 
@@ -28,7 +33,12 @@ export default function Transactions() {
   // Les virements vers un compte manuel (Livret A, PEA…) n'ont pas de contrepartie bancaire : jamais appariés.
   const manual = useLoad(fetchManualAccounts, []);
   const manualNames = useMemo(() => new Set((manual.data ?? []).map((m) => m.name)), [manual.data]);
-  const sections = useMemo(() => groupByDay(pairTransfers(shown, manualNames)), [shown, manualNames]);
+  const [hideInternal, setHideInternal] = useState(readHide);
+  const toggleHide = () => setHideInternal((v) => { writeHide(!v); return !v; });
+  const sections = useMemo(() => {
+    const items = pairTransfers(shown, manualNames);
+    return groupByDay(hideInternal ? withoutInternal(items) : items);
+  }, [shown, manualNames, hideInternal]);
 
   // Opération sans taux de change connu : exclue des totaux plutôt que comptée en euros.
   const spent = shown.filter((x) => !x.is_internal && x.amount < 0).reduce((sum, x) => sum + (x.amount_eur ?? 0), 0);
@@ -64,6 +74,7 @@ export default function Transactions() {
               {[ALL, ...banks].map((b) => (
                 <Chip key={b} label={b === ALL ? b : bankShortName(b)} on={bank === b} onPress={() => setBank(b)} />
               ))}
+              <Chip label="Masquer internes" on={hideInternal} onPress={toggleHide} />
             </ScrollView>
             {error && <ErrorBox message={error} onRetry={reload} />}
           </View>

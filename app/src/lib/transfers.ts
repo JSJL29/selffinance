@@ -40,6 +40,11 @@ export function pairTransfers(txs: Tx[], manualNames: Set<string> = new Set()): 
   return items;
 }
 
+/** Liste sans les virements internes (paires « SG → BNP » comprises) : il ne reste que les vraies dépenses et rentrées. */
+export function withoutInternal(items: ListItem[]): ListItem[] {
+  return items.filter((i) => i.kind === 'tx' && !i.tx.is_internal);
+}
+
 const dateOf = (i: ListItem) => (i.kind === 'tx' ? i.tx.booking_date : i.out.booking_date);
 
 /** Sections par jour pour SectionList (liste déjà triée par date) ; une paire au jour du débit. */

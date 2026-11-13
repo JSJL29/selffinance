@@ -67,15 +67,25 @@ export default function Transactions() {
                 </Pressable>
               </View>
               <Text style={[s.small, { color: t.muted }]}>Dépenses hors virements internes</Text>
-              <Text style={[s.big, { color: t.text }]}>{money(spent)}</Text>
+              <View style={s.totalRow}>
+                <Text style={[s.big, { color: t.text }]}>{money(spent)}</Text>
+                <Pressable
+                  onPress={toggleHide} hitSlop={8}
+                  accessibilityRole="switch" accessibilityState={{ checked: hideInternal }}
+                  accessibilityLabel="Masquer les virements internes"
+                  style={[s.hideBtn, { borderColor: hideInternal ? t.primary : t.border, backgroundColor: hideInternal ? t.tag : 'transparent' }]}>
+                  <Ionicons name={hideInternal ? 'eye-off-outline' : 'eye-outline'} size={16} color={hideInternal ? t.primary : t.muted} />
+                  <Text style={{ color: hideInternal ? t.primary : t.muted, fontSize: 13, fontWeight: '600' }}>
+                    {hideInternal ? 'Internes masqués' : 'Internes visibles'}
+                  </Text>
+                </Pressable>
+              </View>
               {received > 0 && <Text style={[s.small, { color: t.success }]}>Rentrées : {money(received, 'EUR', { sign: true })}</Text>}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
               {[ALL, ...banks].map((b) => (
                 <Chip key={b} label={b === ALL ? b : bankShortName(b)} on={bank === b} onPress={() => setBank(b)} />
-              ))}
-              <Chip label="Masquer internes" on={hideInternal} onPress={toggleHide} />
-            </ScrollView>
+              ))}            </ScrollView>
             {error && <ErrorBox message={error} onRetry={reload} />}
           </View>
         }
@@ -98,5 +108,7 @@ const s = StyleSheet.create({
   month: { fontSize: 16, fontWeight: '600', minWidth: 130, textAlign: 'center' },
   small: { fontSize: 13 },
   big: { fontSize: 34, fontWeight: '700', marginVertical: 2, fontVariant: ['tabular-nums'] },
+  totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  hideBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
   chips: { gap: 8, paddingHorizontal: 20, paddingVertical: 8 },
 });

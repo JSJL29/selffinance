@@ -4,10 +4,9 @@
 // avec le JWT de l'utilisateur, dans la limite du budget du jour (sync_budget).
 // Corps optionnel (cron seulement) : { "days": 90 } pour forcer une reprise de l'historique.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { daysBefore, periodLimitDays, syncFrom } from "./period.ts";
 
 const EB = "https://api.enablebanking.com";
-const FIRST_DAYS = 90; // premier import
-const OVERLAP_DAYS = 7; // on recharge toujours la dernière semaine (opérations en cours)
 const BALANCE_PREF = ["ITAV", "CLAV", "ITBD", "CLBD", "OPAV", "XPCD", "PRCD", "FWAV", "OTHR"];
 
 const env = (k: string) => {
@@ -67,7 +66,6 @@ async function eb(token: string, path: string): Promise<Json> {
 
 // ---------- Conversions ----------
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
-const daysAgo = (n: number, from = new Date()) => isoDay(new Date(from.getTime() - n * 86400_000));
 
 function mapTx(t: Json) {
   const amt = Math.abs(Number(t.transaction_amount?.amount ?? 0));
@@ -130,23 +128,36 @@ async function syncAccount(token: string, acc: Json, forceDays: number | null) {
     Object.assign(patch, { balance: null, balance_type: null });
   }
 
-  let from: string;
-  if (forceDays) from = daysAgo(forceDays);
-  else {
+  let lastBooking: string | null = null;
+  if (!forceDays) {
     const { data: last } = await db.from("transactions").select("booking_date")
       .eq("account_uid", acc.uid).order("booking_date", { ascending: false }).limit(1);
-    from = last?.length ? daysAgo(OVERLAP_DAYS, new Date(last[0].booking_date)) : daysAgo(FIRST_DAYS);
+    lastBooking = last?.[0]?.booking_date ?? null;
   }
+  let from = syncFrom(new Date(), lastBooking, forceDays);
 
-  const txs: Json[] = [];
-  let ck: string | null = null;
-  do {
-    const q: string = `/accounts/${acc.uid}/transactions?date_from=${from}` +
-      (ck ? `&continuation_key=${encodeURIComponent(ck)}` : "");
-    const r = await eb(token, q);
-    txs.push(...(r.transactions ?? []));
-    ck = r.continuation_key ?? null;
-  } while (ck);
+  const fetchTxs = async (since: string) => {
+    const out: Json[] = [];
+    let ck: string | null = null;
+    do {
+      const q: string = `/accounts/${acc.uid}/transactions?date_from=${since}` +
+        (ck ? `&continuation_key=${encodeURIComponent(ck)}` : "");
+      const r = await eb(token, q);
+      out.push(...(r.transactions ?? []));
+      ck = r.continuation_key ?? null;
+    } while (ck);
+    return out;
+  };
+  let txs: Json[];
+  try {
+    txs = await fetchTxs(from);
+  } catch (e) {
+    // Période refusée par la banque (ex. Caisse d'Épargne : 62 jours) : un seul nouvel essai dans sa limite.
+    const limit = periodLimitDays(String(e));
+    if (!limit) throw e;
+    from = daysBefore(limit - 1, new Date());
+    txs = await fetchTxs(from);
+  }
 
   const rows = txs.map(mapTx);
   if (!currency && rows.length) patch.currency = currency = rows[0].currency;
@@ -223,7 +234,12 @@ Deno.serve(async (req) => {
   let query = db.from("accounts").select("uid, bank, name, iban, currency, hidden, bank_sessions(valid_until)");
   if (only) query = query.in("uid", only);
   const { data: accounts, error } = await query;
-  if (error) return fail(500, error.message);
+  if (error) {
+    // On clôt la synchro, sinon elle reste « en cours » et bloque le bouton quelques minutes.
+    log.accounts = error.message;
+    if (run) await db.from("sync_runs").update({ finished_at: new Date().toISOString(), ok: false, log }).eq("id", run.id);
+    return fail(500, error.message);
+  }
 
   let token: string;
   try {

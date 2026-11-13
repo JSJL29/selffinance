@@ -56,7 +56,8 @@ async function authorized(req: Request) {
     if (error || !data) throw new Error(`sync_config: ${error?.message ?? "vide"}`);
     syncSecret = (data as { sync_secret: string }).sync_secret;
   }
-  if (auth === `Bearer ${syncSecret}`) return true;
+  // Secret absent de Vault : pas d'accès cron (sinon « Bearer null » passerait).
+  if (syncSecret && auth === `Bearer ${syncSecret}`) return true;
   const { data: u } = await db.auth.getUser(auth.replace(/^Bearer\s+/i, ""));
   if (!u?.user) return false;
   const { data } = await db.from("app_users").select("user_id").eq("user_id", u.user.id).maybeSingle();
@@ -131,16 +132,15 @@ async function sync() {
       }
     }
 
-    // Positions : IBKR fait foi, on remplace celles du compte.
-    const { error: delErr } = await db.from("positions").delete().eq("account_id", accountId);
-    if (delErr) throw new Error(delErr.message);
-    if (st.positions.length) {
-      const { error } = await db.from("positions").insert(st.positions.map((p) => ({
-        account_id: accountId, instrument_id: ids.get(`ibkr:${p.conid}`), quantity: p.quantity,
+    // Positions : IBKR fait foi, on remplace celles du compte (une transaction : un échec ne vide pas le compte).
+    const { error: posErr } = await db.rpc("replace_positions", {
+      p_account: accountId,
+      p_rows: st.positions.map((p) => ({
+        instrument_id: ids.get(`ibkr:${p.conid}`), quantity: p.quantity,
         avg_cost: Number.isFinite(p.costBasisPrice) ? p.costBasisPrice : 0, cost_currency: p.currency,
-      })));
-      if (error) throw new Error(error.message);
-    }
+      })),
+    });
+    if (posErr) throw new Error(`positions: ${posErr.message}`);
 
     // Achats, ventes et dividendes (idempotent : une opération IBKR déjà vue n'est pas recréée).
     // Les liquidités IBKR viennent du relevé : cash_credit reste à 0.
@@ -223,7 +223,7 @@ async function sync() {
 
     // Cours en direct (fonction `quotes`, Yahoo) : le relevé ne donne que la clôture de la veille.
     const held = [...new Set(st.positions.map((p) => ids.get(`ibkr:${p.conid}`)).filter(Boolean))];
-    if (held.length) {
+    if (held.length && syncSecret) {
       await fetch(`${env("SUPABASE_URL")}/functions/v1/quotes/refresh`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${syncSecret}`, "Content-Type": "application/json" },

@@ -22,8 +22,9 @@ export default function Transactions() {
   const shown = useMemo(() => (data ?? []).filter((x) => bank === ALL || x.bank === bank), [data, bank]);
   const sections = useMemo(() => byDay(shown), [shown]);
 
-  const spent = shown.filter((x) => !x.is_internal && x.amount < 0).reduce((sum, x) => sum + x.amount_eur, 0);
-  const received = shown.filter((x) => !x.is_internal && x.amount > 0).reduce((sum, x) => sum + x.amount_eur, 0);
+  // Opération sans taux de change connu : exclue des totaux plutôt que comptée en euros.
+  const spent = shown.filter((x) => !x.is_internal && x.amount < 0).reduce((sum, x) => sum + (x.amount_eur ?? 0), 0);
+  const received = shown.filter((x) => !x.is_internal && x.amount > 0).reduce((sum, x) => sum + (x.amount_eur ?? 0), 0);
 
   const now = new Date();
   const isCurrent = month.getFullYear() === now.getFullYear() && month.getMonth() === now.getMonth();

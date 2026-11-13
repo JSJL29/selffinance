@@ -125,7 +125,8 @@ async function isCron(req: Request) {
     if (error || !data) throw new Error(`sync_config: ${error?.message ?? "vide"}`);
     syncSecret = (data as { sync_secret: string }).sync_secret;
   }
-  return req.headers.get("authorization") === `Bearer ${syncSecret}`;
+  // Secret absent de Vault : pas d'accès cron (sinon « Bearer null » passerait).
+  return !!syncSecret && req.headers.get("authorization") === `Bearer ${syncSecret}`;
 }
 
 async function isAppUser(req: Request) {

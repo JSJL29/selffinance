@@ -38,7 +38,8 @@ export type Tx = {
   internal_label: string | null;
   bank: string;
   iban: string | null;
-  amount_eur: number;
+  /** null si le taux de change de la devise est inconnu. */
+  amount_eur: number | null;
 };
 
 /** Un « compte » affiché : Revolut EUR/USD/GBP partagent le même IBAN et sont regroupés. */
@@ -100,7 +101,7 @@ export async function fetchAccounts(): Promise<AccountRow[]> {
 
 const TX_COLS = 'id, account_uid, booking_date, amount, currency, counterparty, description, status, is_internal, internal_label, bank, iban, amount_eur';
 
-const normTx = (r: Record<string, unknown>) => ({ ...r, amount: Number(r.amount), amount_eur: Number(r.amount_eur) }) as Tx;
+const normTx = (r: Record<string, unknown>) => ({ ...r, amount: Number(r.amount), amount_eur: r.amount_eur == null ? null : Number(r.amount_eur) }) as Tx;
 
 export async function fetchAccountTx(uids: string[]): Promise<Tx[]> {
   const { data, error } = await supabase
@@ -271,11 +272,17 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
   const fnRef = useRef(fn);
   useLayoutEffect(() => { fnRef.current = fn; });
 
+  // Seule la dernière requête lancée compte : une réponse lente (ex. mois précédent) n'écrase pas la suivante.
+  const lastRequest = useRef(0);
   const load = useCallback(async () => {
+    const id = ++lastRequest.current;
     try {
-      setData(await fnRef.current());
+      const result = await fnRef.current();
+      if (id !== lastRequest.current) return;
+      setData(result);
       setError(null);
     } catch (e) {
+      if (id !== lastRequest.current) return;
       setError(e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e));
     }
   }, []);

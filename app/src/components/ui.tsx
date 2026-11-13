@@ -35,7 +35,7 @@ export const TxRow = memo(function TxRow({ tx, showBank }: { tx: Tx; showBank?: 
       </View>
       <View style={s.amountBox}>
         <Text style={[s.amount, { color: positive ? t.success : t.text }]}>{money(tx.amount, tx.currency, { sign: true })}</Text>
-        {tx.currency !== 'EUR' && <Text style={[s.sub, { color: t.muted }]}>≈ {money(tx.amount_eur, 'EUR', { sign: true })}</Text>}
+        {tx.currency !== 'EUR' && tx.amount_eur != null && <Text style={[s.sub, { color: t.muted }]}>≈ {money(tx.amount_eur, 'EUR', { sign: true })}</Text>}
       </View>
     </View>
   );

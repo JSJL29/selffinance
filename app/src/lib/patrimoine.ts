@@ -2,6 +2,26 @@
 import { supabase } from './supabase';
 import { functionError } from './data';
 import { isoDay } from './format';
+import type { SnapshotRow } from './history';
+
+/** Photos quotidiennes du patrimoine depuis `from` (« AAAA-MM-JJ »), ou tout l'historique si null. */
+export async function fetchWealthHistory(from: string | null): Promise<SnapshotRow[]> {
+  let q = supabase.from('wealth_snapshots')
+    .select('date, bank_uid, manual_id, value_eur, invested_eur, missing')
+    .order('date', { ascending: true });
+  if (from) q = q.gte('date', from);
+  const { data, error } = await q;
+  if (error) throw error;
+  const num = (v: unknown) => (v == null ? null : Number(v));
+  return (data ?? []).map((r) => ({
+    date: r.date as string,
+    bank_uid: (r.bank_uid as string | null) ?? null,
+    manual_id: (r.manual_id as string | null) ?? null,
+    value_eur: num(r.value_eur),
+    invested_eur: num(r.invested_eur),
+    missing: Number(r.missing ?? 0),
+  }));
+}
 
 export type AccountKind = 'savings' | 'investment';
 export type Envelope =

@@ -7,7 +7,10 @@ import {
   AccountRow, CONSENT_WARN_DAYS, byDay, consentDaysLeft, fetchAccounts, fetchAccountTx, groupAccounts, setManualBalance, useLoad,
 } from '@/lib/data';
 import { useConnectBank } from '@/components/connect';
-import { ago, maskIban, money, shortDate } from '@/lib/format';
+import { ago, isoDay, maskIban, money, shortDate } from '@/lib/format';
+import { fetchWealthHistory } from '@/lib/patrimoine';
+import { type Period, accountSeries, periodStart } from '@/lib/history';
+import { LineChart, PeriodPicker } from '@/components/LineChart';
 import { useTheme } from '@/lib/theme';
 import { DayHeader, Empty, ErrorBox, Loading, TxRow } from '@/components/ui';
 import { showAlert } from '@/lib/dialog';
@@ -23,9 +26,18 @@ export default function AccountDetail() {
   const txs = useLoad(() => (uids.length ? fetchAccountTx(uids) : Promise.resolve([])), [uids.join(',')]);
   const sections = useMemo(() => byDay(txs.data ?? []), [txs.data]);
 
+  // Historique (photo de 22 h) du groupe : somme de ses comptes (ex. Revolut EUR + USD).
+  const [period, setPeriod] = useState<Period>('3M');
+  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period]);
+  const uidKey = uids.join(',');
+  const curve = useMemo(() => {
+    const mine = new Set(uidKey.split(','));
+    return accountSeries(history.data ?? [], (r) => mine.has(r.bank_uid ?? ''), 'value_eur');
+  }, [history.data, uidKey]);
+
   if (!accounts.data && !accounts.error) return <Loading />;
 
-  const refresh = async () => { await Promise.all([accounts.refresh(), txs.refresh()]); };
+  const refresh = async () => { await Promise.all([accounts.refresh(), txs.refresh(), history.refresh()]); };
 
   return (
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
@@ -51,6 +63,10 @@ export default function AccountDetail() {
                     {m.currency} : {money(m.current_balance ?? 0, m.currency ?? 'EUR')}
                   </Text>
                 ))}
+                <View style={s.chart}>
+                  <LineChart series={[{ points: curve, label: 'Solde' }]} />
+                  <PeriodPicker value={period} onChange={setPeriod} />
+                </View>
                 <BalanceEditor account={group.members[0]} onSaved={accounts.reload} />
                 {group.error && <Text style={[s.small, { color: t.danger, marginTop: 8 }]}>{group.error}</Text>}
                 <ConsentBox bank={group.bank} until={group.consentUntil} onDone={refresh} />
@@ -170,6 +186,7 @@ const s = StyleSheet.create({
   consent: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14, padding: 12, borderRadius: 12, borderWidth: 1 },
   consentButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7, minWidth: 104, alignItems: 'center' },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
+  chart: { marginTop: 14 },
   back: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginLeft: -4 },
   title: { fontSize: 22, fontWeight: '700' },
   small: { fontSize: 13 },

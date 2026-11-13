@@ -4,9 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchAccounts, useLoad } from '@/lib/data';
-import { ManualAccount, envelopeLabel, fetchManualAccounts, fetchQuotesUpdatedAt, refreshHeldQuotes, syncIbkr } from '@/lib/patrimoine';
+import {
+  ManualAccount, envelopeLabel, fetchManualAccounts, fetchQuotesUpdatedAt, fetchWealthHistory, refreshHeldQuotes, syncIbkr,
+} from '@/lib/patrimoine';
 import { netWorth } from '@/lib/networth';
-import { ago, money, pct } from '@/lib/format';
+import { type Period, periodStart, totalSeries } from '@/lib/history';
+import { ago, isoDay, money, pct } from '@/lib/format';
+import { LineChart, PeriodPicker } from '@/components/LineChart';
 import { useTheme } from '@/lib/theme';
 import { ErrorBox, Loading } from '@/components/ui';
 import { showAlert } from '@/lib/dialog';
@@ -31,13 +35,21 @@ export default function Patrimoine() {
   const investments = visible.filter((m) => m.kind === 'investment');
   const bankCount = (bank.data ?? []).filter((a) => !a.hidden).length;
 
+  // Historique (photo de 22 h) : comptes non masqués aujourd'hui, comme le total affiché.
+  const [period, setPeriod] = useState<Period>('3M');
+  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period]);
+  const totalCurve = useMemo(() => totalSeries(history.data ?? [], {
+    bank: new Set((bank.data ?? []).filter((a) => !a.hidden).map((a) => a.uid)),
+    manual: new Set((manual.data ?? []).filter((m) => !m.hidden).map((m) => m.id)),
+  }), [history.data, bank.data, manual.data]);
+
   if ((!bank.data && !bank.error) || (!manual.data && !manual.error)) return <Loading />;
 
   const refresh = async () => {
     setQuoting(true);
     await refreshHeldQuotes().catch(() => undefined); // cours en direct ; en cas d'échec on garde les derniers
     setQuoting(false);
-    await Promise.all([bank.refresh(), manual.refresh(), quotedAt.refresh()]);
+    await Promise.all([bank.refresh(), manual.refresh(), quotedAt.refresh(), history.refresh()]);
   };
   const pnlColor = nw.pnl > 0 ? t.success : nw.pnl < 0 ? t.danger : t.muted;
 
@@ -57,6 +69,10 @@ export default function Patrimoine() {
           {quotedAt.data && (
             <Text style={[s.small, { color: t.muted }]}>Cours mis à jour {ago(quotedAt.data)}</Text>
           )}
+          <View style={s.chart}>
+            <LineChart series={[{ points: totalCurve, label: 'Total' }]} />
+            <PeriodPicker value={period} onChange={setPeriod} />
+          </View>
           <Pressable onPress={() => router.push('/patrimoine/tax')} hitSlop={8} style={s.taxLink}>
             <Ionicons name="receipt-outline" size={15} color={t.primary} />
             <Text style={{ color: t.primary, fontSize: 14, fontWeight: '600' }}>Bilan fiscal {new Date().getFullYear()}</Text>
@@ -177,6 +193,7 @@ const s = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 8 },
   total: { fontSize: 36, fontWeight: '700', marginVertical: 4, fontVariant: ['tabular-nums'] },
   small: { fontSize: 13 },
+  chart: { marginTop: 14 },
   taxLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10 },
   section: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
   sectionTitle: { fontSize: 12, fontWeight: '600', letterSpacing: 0.5, fontVariant: ['tabular-nums'] },

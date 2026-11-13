@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,9 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLoad } from '@/lib/data';
 import {
   ManualAccount, Operation, PositionRow, deleteOperation, envelopeLabel, fetchManualAccount, fetchOperations,
-  fetchPositions, fetchQuotesUpdatedAt, refreshHeldQuotes, syncIbkr,
+  fetchPositions, fetchQuotesUpdatedAt, fetchWealthHistory, refreshHeldQuotes, syncIbkr,
 } from '@/lib/patrimoine';
-import { ago, frDate, money, pct, shortDate } from '@/lib/format';
+import { ago, frDate, isoDay, money, pct, shortDate } from '@/lib/format';
+import { type Period, accountSeries, periodStart } from '@/lib/history';
+import { LineChart, PeriodPicker, type Series } from '@/components/LineChart';
 import { useTheme } from '@/lib/theme';
 import { Empty, ErrorBox, Loading } from '@/components/ui';
 import { BackLink } from '@/components/form';
@@ -24,9 +26,24 @@ export default function ManualAccountDetail() {
   const quotedAt = useLoad(() => fetchQuotesUpdatedAt(id), [id]);
   const [quoting, setQuoting] = useState(false);
 
+  // Historique (photo de 22 h) : valeur, et montant investi en pointillés pour un placement.
+  const [period, setPeriod] = useState<Period>('3M');
+  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period]);
+  const isInvestment = account.data?.kind === 'investment';
+  const curves = useMemo<Series[]>(() => {
+    const mine = (r: { manual_id: string | null }) => r.manual_id === id;
+    const rows = history.data ?? [];
+    const value: Series = { points: accountSeries(rows, mine, 'value_eur'), label: 'Valeur' };
+    return isInvestment
+      ? [value, { points: accountSeries(rows, mine, 'invested_eur'), label: 'Investi', dashed: true }]
+      : [value];
+  }, [history.data, id, isInvestment]);
+
   if (!account.data && !account.error) return <Loading />;
   const a = account.data;
-  const reload = async () => { await Promise.all([account.refresh(), positions.refresh(), operations.refresh(), quotedAt.refresh()]); };
+  const reload = async () => {
+    await Promise.all([account.refresh(), positions.refresh(), operations.refresh(), quotedAt.refresh(), history.refresh()]);
+  };
   const refresh = async () => {
     if (a?.kind === 'investment') {
       setQuoting(true);
@@ -66,6 +83,10 @@ export default function ManualAccountDetail() {
             {a.kind === 'investment' && quotedAt.data && (
               <Text style={[s.small, { color: t.muted }]}>Cours mis à jour {ago(quotedAt.data)} · tire pour rafraîchir</Text>
             )}
+            <View style={s.chart}>
+              <LineChart series={curves} />
+              <PeriodPicker value={period} onChange={setPeriod} />
+            </View>
 
             {synced && <IbkrSyncBox account={a} onDone={reload} />}
 
@@ -264,6 +285,7 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: 16, paddingBottom: 40, gap: 8 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginTop: 8 },
+  chart: { marginTop: 14 },
   grow: { flex: 1, minWidth: 0 },
   title: { fontSize: 26, fontWeight: '700' },
   big: { fontSize: 32, fontWeight: '700', fontVariant: ['tabular-nums'], marginTop: 4 },

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLoad } from '@/lib/data';
 import {
   ManualAccount, Operation, PositionRow, deleteOperation, envelopeLabel, fetchManualAccount, fetchOperations,
-  fetchPositions, syncIbkr,
+  fetchPositions, refreshHeldQuotes, syncIbkr,
 } from '@/lib/patrimoine';
 import { ago, frDate, money, pct, shortDate } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
@@ -21,10 +21,19 @@ export default function ManualAccountDetail() {
   const account = useLoad(() => fetchManualAccount(id), [id]);
   const positions = useLoad(() => fetchPositions(id), [id]);
   const operations = useLoad(() => fetchOperations(id), [id]);
+  const [quoting, setQuoting] = useState(false);
 
   if (!account.data && !account.error) return <Loading />;
   const a = account.data;
-  const refresh = async () => { await Promise.all([account.refresh(), positions.refresh(), operations.refresh()]); };
+  const reload = async () => { await Promise.all([account.refresh(), positions.refresh(), operations.refresh()]); };
+  const refresh = async () => {
+    if (a?.kind === 'investment') {
+      setQuoting(true);
+      await refreshHeldQuotes().catch(() => undefined); // cours en direct ; en cas d'échec on garde les derniers
+      setQuoting(false);
+    }
+    await reload();
+  };
   const color = a && a.pnl_eur > 0 ? t.success : a && a.pnl_eur < 0 ? t.danger : t.muted;
   const edit = () => router.push({ pathname: '/patrimoine/account-edit', params: { id } });
   const synced = !!a?.sync_source;
@@ -33,7 +42,7 @@ export default function ManualAccountDetail() {
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <ScrollView
         contentContainerStyle={s.content}
-        refreshControl={<RefreshControl refreshing={account.refreshing || positions.refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}>
+        refreshControl={<RefreshControl refreshing={quoting || account.refreshing || positions.refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}>
         <BackLink label="Patrimoine" fallback="/patrimoine" />
         {account.error && <ErrorBox message={account.error} onRetry={account.reload} />}
         {a && (
@@ -54,7 +63,7 @@ export default function ManualAccountDetail() {
               </Text>
             )}
 
-            {synced && <IbkrSyncBox account={a} onDone={refresh} />}
+            {synced && <IbkrSyncBox account={a} onDone={reload} />}
 
             <Pressable onPress={edit} disabled={synced} style={[s.cash, { backgroundColor: t.card, borderColor: t.border }]}>
               <View style={s.grow}>
@@ -87,7 +96,7 @@ export default function ManualAccountDetail() {
 
                 <Text style={[s.section, { color: t.muted }]}>OPÉRATIONS</Text>
                 {operations.error && <ErrorBox message={operations.error} onRetry={operations.reload} />}
-                {operations.data?.map((o) => <OperationLine key={o.id} o={o} onDeleted={refresh} />)}
+                {operations.data?.map((o) => <OperationLine key={o.id} o={o} onDeleted={reload} />)}
                 {operations.data?.length === 0 && (
                   <Empty text={synced ? 'Les achats, ventes et dividendes arrivent avec la synchro IBKR.' : 'Aucune vente ni dividende.'} />
                 )}

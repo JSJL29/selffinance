@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchAccounts, useLoad } from '@/lib/data';
-import { ManualAccount, envelopeLabel, fetchManualAccounts, syncIbkr } from '@/lib/patrimoine';
+import { ManualAccount, envelopeLabel, fetchManualAccounts, refreshHeldQuotes, syncIbkr } from '@/lib/patrimoine';
 import { netWorth } from '@/lib/networth';
 import { money, pct } from '@/lib/format';
 import { useTheme } from '@/lib/theme';
@@ -16,6 +16,13 @@ export default function Patrimoine() {
   const t = useTheme();
   const bank = useLoad(fetchAccounts, []);
   const manual = useLoad(fetchManualAccounts, []);
+  const [quoting, setQuoting] = useState(false);
+
+  // Cours en direct à l'ouverture de l'onglet, puis recalcul des montants.
+  useEffect(() => {
+    refreshHeldQuotes().then(() => manual.reload(), () => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const nw = useMemo(() => netWorth(bank.data ?? [], manual.data ?? []), [bank.data, manual.data]);
   const visible = (manual.data ?? []).filter((m) => !m.hidden);
@@ -25,14 +32,19 @@ export default function Patrimoine() {
 
   if ((!bank.data && !bank.error) || (!manual.data && !manual.error)) return <Loading />;
 
-  const refresh = async () => { await Promise.all([bank.refresh(), manual.refresh()]); };
+  const refresh = async () => {
+    setQuoting(true);
+    await refreshHeldQuotes().catch(() => undefined); // cours en direct ; en cas d'échec on garde les derniers
+    setQuoting(false);
+    await Promise.all([bank.refresh(), manual.refresh()]);
+  };
   const pnlColor = nw.pnl > 0 ? t.success : nw.pnl < 0 ? t.danger : t.muted;
 
   return (
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <ScrollView
         contentContainerStyle={{ paddingBottom: 32 }}
-        refreshControl={<RefreshControl refreshing={bank.refreshing || manual.refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}>
+        refreshControl={<RefreshControl refreshing={quoting || bank.refreshing || manual.refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}>
         <View style={s.header}>
           <Text style={[s.small, { color: t.muted }]}>Patrimoine total</Text>
           <Text style={[s.total, { color: t.text }]}>{money(nw.total)}</Text>

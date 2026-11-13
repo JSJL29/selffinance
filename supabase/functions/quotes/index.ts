@@ -1,7 +1,8 @@
 // Cours des titres du Patrimoine (n'utilise ni Enable Banking ni le budget de synchro).
 //   GET  /quotes/search?q=<ISIN | nom>   (JWT app_user ou secret) → { ok, results: SearchResult[] }
-//   POST /quotes/refresh { ids?: string[] }
-//        JWT app_user : met à jour les titres `ids` ; secret Vault (cron) : tous les titres automatiques.
+//   POST /quotes/refresh { ids?: string[] } | { held: true }
+//        JWT app_user : met à jour les titres `ids`, ou tous les titres détenus (`held`, « tirer pour
+//        rafraîchir » de l'app : cours sautés s'ils ont moins d'une minute) ; secret Vault (cron) : tous.
 // Les sources de cours sont derrière l'interface PriceProvider : on peut remplacer Yahoo
 // (API non officielle) par un fournisseur payant sans toucher au reste.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -159,7 +160,20 @@ async function refreshIbkr(i: Json): Promise<boolean> {
   return true;
 }
 
+const FRESH_MS = 60_000;
+
+/** Titres détenus (positions non nulles) dont le cours a plus d'une minute. */
+async function heldIds(): Promise<string[]> {
+  const { data, error } = await db.from("positions").select("instrument_id, instruments(price_updated_at)").neq("quantity", 0);
+  if (error) throw new Error(error.message);
+  const now = Date.now();
+  return [...new Set((data ?? [])
+    .filter((p: Json) => !p.instruments?.price_updated_at || now - Date.parse(p.instruments.price_updated_at) > FRESH_MS)
+    .map((p: Json) => p.instrument_id as string))];
+}
+
 async function refresh(ids: string[] | null) {
+  if (ids && !ids.length) return { ok: true, updated: 0, errors: {} };
   let q = db.from("instruments").select("id, price_source, source_symbol, quote_symbol, ticker, isin, currency")
     .in("price_source", ["yahoo", "amf", "ibkr"]);
   if (ids) q = q.in("id", ids);
@@ -208,8 +222,8 @@ Deno.serve(async (req) => {
     }
     if (route === "refresh" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));
-      const ids = Array.isArray(body?.ids) ? body.ids.map(String) : null;
-      if (!cron && !ids?.length) return fail(400, "ids requis.");
+      const ids = body?.held === true ? await heldIds() : Array.isArray(body?.ids) ? body.ids.map(String) : null;
+      if (!cron && !ids) return fail(400, "ids ou held requis.");
       return json(await refresh(ids));
     }
     return fail(404, "Route inconnue.");

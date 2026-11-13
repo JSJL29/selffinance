@@ -184,6 +184,12 @@ export async function refreshQuotes(ids: string[]) {
   if (error) throw new Error(await functionError(error));
 }
 
+/** Cours en direct de tous les titres détenus (Yahoo ; le serveur saute ceux de moins d'une minute). */
+export async function refreshHeldQuotes() {
+  const { error } = await supabase.functions.invoke('quotes/refresh', { body: { held: true } });
+  if (error) throw new Error(await functionError(error));
+}
+
 export type ManualInstrument = { name: string; type: InstrumentType; currency?: string; price: number };
 
 /**

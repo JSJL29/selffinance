@@ -53,6 +53,32 @@ export const TxRow = memo(function TxRow({ tx, showBank }: { tx: Tx; showBank?: 
   );
 });
 
+/** Virement entre deux de mes banques, sur une ligne : « SG → BNP », montant sans signe (ni gagné ni perdu). */
+export const TransferRow = memo(function TransferRow({ out, in: inn }: { out: Tx; in: Tx }) {
+  const t = useTheme();
+  const amount = Math.abs(out.amount);
+  const late = inn.booking_date !== out.booking_date;
+  return (
+    <View style={[s.row, { backgroundColor: t.card, borderColor: t.border }, s.internal]}>
+      <BankDot bank={out.bank} size={32} />
+      <View style={s.grow}>
+        <View style={s.titleLine}>
+          <Text style={[s.title, { color: t.text }]} numberOfLines={1}>
+            {bankShortName(out.bank)} → {bankShortName(inn.bank)}
+          </Text>
+          <Text style={[s.tag, { backgroundColor: t.tag, color: t.muted }]}>interne</Text>
+        </View>
+        <Text style={[s.sub, { color: t.muted }]} numberOfLines={1}>
+          Virement entre mes comptes{late ? ` · reçu le ${dayLabel(inn.booking_date).toLowerCase()}` : ''}
+        </Text>
+      </View>
+      <View style={s.amountBox}>
+        <Text style={[s.amount, { color: t.muted }]}>{money(amount, out.currency)}</Text>
+      </View>
+    </View>
+  );
+});
+
 export function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   const t = useTheme();
   return (

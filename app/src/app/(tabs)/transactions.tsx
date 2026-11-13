@@ -2,10 +2,13 @@ import { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { byDay, fetchMonthTx, useLoad } from '@/lib/data';
+import { fetchMonthTx, useLoad } from '@/lib/data';
+import { type ListItem, groupByDay, pairTransfers } from '@/lib/transfers';
 import { money, monthLabel } from '@/lib/format';
 import { bankShortName, useTheme } from '@/lib/theme';
-import { Chip, DayHeader, Empty, ErrorBox, Loading, TxRow } from '@/components/ui';
+import { Chip, DayHeader, Empty, ErrorBox, Loading, TransferRow, TxRow } from '@/components/ui';
+
+const itemKey = (i: ListItem) => (i.kind === 'tx' ? String(i.tx.id) : `v${i.out.id}-${i.in.id}`);
 
 const ALL = 'Tous';
 
@@ -20,7 +23,8 @@ export default function Transactions() {
 
   const banks = useMemo(() => [...new Set((data ?? []).map((x) => x.bank))].sort((a, b) => a.localeCompare(b, 'fr')), [data]);
   const shown = useMemo(() => (data ?? []).filter((x) => bank === ALL || x.bank === bank), [data, bank]);
-  const sections = useMemo(() => byDay(shown), [shown]);
+  // Virement SG → BNP : les deux opérations réunies en une ligne (totaux inchangés, les internes en sont exclus).
+  const sections = useMemo(() => groupByDay(pairTransfers(shown)), [shown]);
 
   // Opération sans taux de change connu : exclue des totaux plutôt que comptée en euros.
   const spent = shown.filter((x) => !x.is_internal && x.amount < 0).reduce((sum, x) => sum + (x.amount_eur ?? 0), 0);
@@ -34,7 +38,7 @@ export default function Transactions() {
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <SectionList
         sections={sections}
-        keyExtractor={(x) => String(x.id)}
+        keyExtractor={itemKey}
         stickySectionHeadersEnabled
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={t.primary} colors={[t.primary]} />}
         ListHeaderComponent={
@@ -61,7 +65,9 @@ export default function Transactions() {
           </View>
         }
         renderSectionHeader={({ section }) => <DayHeader iso={section.title} />}
-        renderItem={({ item }) => <TxRow tx={item} showBank />}
+        renderItem={({ item }) => (item.kind === 'tx'
+          ? <TxRow tx={item.tx} showBank />
+          : <TransferRow out={item.out} in={item.in} />)}
         ListEmptyComponent={data ? <Empty text="Aucune opération ce mois-ci." /> : <Loading />}
         contentContainerStyle={{ paddingBottom: 32 }}
       />

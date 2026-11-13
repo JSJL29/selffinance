@@ -2,7 +2,7 @@
   "expo": {
     "name": "SelfFinance",
     "slug": "selffinance",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -27,7 +27,16 @@
       "expo-status-bar",
       "expo-sqlite",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0D10",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "dark": { "backgroundColor": "#0B0D10", "image": "./assets/splash-icon.png" }
+        }
+      ]
     ],
     "scheme": "selffinance",
     "extra": {

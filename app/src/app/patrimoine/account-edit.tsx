@@ -4,9 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLoad } from '@/lib/data';
 import {
-  ENVELOPES, Envelope, ManualAccount, currentCash, deleteManualAccount, envelopeLabel, fetchManualAccount, saveManualAccount,
+  ENVELOPES, Envelope, MIN_TRANSFER_PATTERN, ManualAccount, currentCash, deleteManualAccount, envelopeLabel,
+  fetchManualAccount, saveManualAccount,
 } from '@/lib/patrimoine';
-import { parseAmount } from '@/lib/format';
+import { isoDay, parseAmount } from '@/lib/format';
+import { transfersFromOnSave } from '@/lib/positions';
 import { useTheme } from '@/lib/theme';
 import { Chip, ErrorBox, Loading } from '@/components/ui';
 import { BackLink, CurrencyPicker, DangerLink, Field, PrimaryButton, currencySymbol } from '@/components/form';
@@ -50,7 +52,8 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
   const kind = ENVELOPES.find((e) => e.value === envelope)!.kind;
   const amount = cash.trim() === '' ? 0 : parseAmount(cash);
   const finalName = name.trim() || [envelopeLabel(envelope), institution.trim()].filter(Boolean).join(' ');
-  const valid = amount != null && finalName.length > 0;
+  const patternTooShort = pattern.trim().length > 0 && pattern.trim().length < MIN_TRANSFER_PATTERN;
+  const valid = amount != null && finalName.length > 0 && !patternTooShort;
 
   async function save() {
     setBusy(true);
@@ -59,6 +62,7 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
         id: account?.id, name: finalName, institution, kind, envelope, cash_balance: amount ?? 0,
         currency: account?.sync_source ? account.currency : currency,
         transfer_pattern: account?.sync_source ? null : pattern,
+        transfers_from: transfersFromOnSave(account, isoDay(new Date())),
       });
       if (account) goBack({ pathname: '/patrimoine/account/[id]', params: { id: account.id } });
       else router.replace({ pathname: '/patrimoine/account/[id]', params: { id: newId } });
@@ -116,6 +120,11 @@ function AccountForm({ account }: { account: ManualAccount | null }) {
                 hint="Texte présent dans le libellé bancaire des virements vers ou depuis ce compte (ex. VIR S/ PEA). Ils s'ajoutent ou se retirent du solde automatiquement."
                 value={pattern} onChangeText={setPattern} autoCapitalize="characters" placeholder="Ex. LIVRET A"
               />
+              {patternTooShort && (
+                <Text style={{ color: t.danger, fontSize: 12 }}>
+                  Au moins {MIN_TRANSFER_PATTERN} caractères, sinon des opérations sans rapport seraient comptées.
+                </Text>
+              )}
             </>
           )}
           {amount == null && <Text style={{ color: t.danger }}>Montant invalide.</Text>}

@@ -51,5 +51,43 @@ begin
   end if;
 end $$;
 
+-- Correctifs de la relecture : libellé trop court, libellés qui se chevauchent, reclassement inutile.
+insert into public.manual_accounts (id, name, kind, envelope, currency, cash_balance, transfer_pattern, transfers_from) values
+  ('00000000-0000-0000-0000-0000000004b1', 'Large', 'savings', 'livret', 'EUR', 0, 'EPARGNE', '2026-01-10'),
+  ('00000000-0000-0000-0000-0000000004b2', 'Précis', 'savings', 'livret', 'EUR', 0, 'EPARGNE B2', '2026-01-10');
+insert into public.transactions (account_uid, booking_date, amount, currency, description, raw) values
+  ('test-mt', '2026-01-11', -70, 'EUR', 'VIR EPARGNE B2', '{}'),
+  ('test-mt', '2026-01-11', -5, 'EUR', 'XYZREGLE TEST', '{}');
+
+do $$
+begin
+  -- Un libellé de moins de 4 caractères est refusé
+  begin
+    update public.manual_accounts set transfer_pattern = 'PEA' where id = '00000000-0000-0000-0000-0000000004b1';
+    raise exception 'libellé de 3 caractères accepté';
+  exception when check_violation then null;
+  end;
+
+  -- Libellés qui se chevauchent (« EPARGNE » ⊂ « EPARGNE B2 ») : l'opération ne compte que pour le plus long
+  if (select transfers from public.manual_account_view where id = '00000000-0000-0000-0000-0000000004b2') is distinct from 70 then
+    raise exception 'libellé précis : virement non compté';
+  end if;
+  if (select transfers from public.manual_account_view where id = '00000000-0000-0000-0000-0000000004b1') is distinct from 0 then
+    raise exception 'libellés qui se chevauchent : virement compté deux fois';
+  end if;
+
+  -- Enregistrer un compte sans changer son libellé ne reclasse pas toutes les opérations
+  insert into public.internal_rules (pattern, label) values ('XYZREGLE', 'Règle test');
+  update public.manual_accounts set cash_balance = 10, transfer_pattern = 'EPARGNE'
+  where id = '00000000-0000-0000-0000-0000000004b1';
+  if exists (select 1 from public.transactions where description = 'XYZREGLE TEST' and is_internal) then
+    raise exception 'reclassement lancé sans changement de libellé';
+  end if;
+  update public.manual_accounts set transfer_pattern = 'EPARGNE X' where id = '00000000-0000-0000-0000-0000000004b1';
+  if not exists (select 1 from public.transactions where description = 'XYZREGLE TEST' and is_internal) then
+    raise exception 'pas de reclassement après changement de libellé';
+  end if;
+end $$;
+
 select 'OK' as resultat;
 rollback;

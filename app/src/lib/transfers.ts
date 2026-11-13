@@ -11,13 +11,16 @@ const day = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +i
  * Réunit chaque débit interne avec le crédit interne correspondant : autre compte, même devise, montant
  * opposé (au centime), au plus 3 jours d'écart ; le plus proche en date, chaque opération une seule fois.
  * L'ordre de la liste est gardé ; la paire prend la place du débit.
+ * `manualNames` : noms des comptes manuels. Un virement vers l'un d'eux (Livret A, PEA…) n'a pas de
+ * contrepartie bancaire : il n'est jamais apparié (sinon « SG → BNP » pourrait réunir deux virements sans rapport).
  */
-export function pairTransfers(txs: Tx[]): ListItem[] {
-  const ins = txs.filter((t) => t.is_internal && t.amount > 0);
+export function pairTransfers(txs: Tx[], manualNames: Set<string> = new Set()): ListItem[] {
+  const pairable = (t: Tx) => t.is_internal && !(t.internal_label && manualNames.has(t.internal_label));
+  const ins = txs.filter((t) => pairable(t) && t.amount > 0);
   const used = new Set<Tx>();
   const pairOf = new Map<Tx, Tx>();
   for (const out of txs) {
-    if (!out.is_internal || out.amount >= 0) continue;
+    if (!pairable(out) || out.amount >= 0) continue;
     let best: Tx | null = null;
     let bestGap = Infinity;
     for (const cand of ins) {

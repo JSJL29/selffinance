@@ -60,3 +60,13 @@ test('groupByDay : une paire est rangée au jour du débit', () => {
   const sections = groupByDay(pairTransfers([other, inn, out]));
   assert.deepEqual(sections.map((s) => [s.title, s.data.length]), [['2026-11-06', 1], ['2026-11-05', 1]]);
 });
+
+test('un virement vers un compte manuel n’est jamais apparié avec un autre virement interne', () => {
+  const toPea = tx('2026-11-05', 'sg', 'SG', -500, { internal_label: 'PEA Fortuneo' });
+  const fromLivret = tx('2026-11-06', 'bnp', 'BNP', 500, { internal_label: 'Livret A Société Générale' });
+  const items = pairTransfers([fromLivret, toPea], new Set(['PEA Fortuneo', 'Livret A Société Générale']));
+  assert.deepEqual(kinds(items), ['tx', 'tx']);
+  const sg = tx('2026-11-05', 'sg', 'SG', -500, { internal_label: 'Fortuneo' });
+  const ft = tx('2026-11-05', 'ft', 'Fortuneo', 500, { internal_label: 'Virement entre comptes' });
+  assert.deepEqual(kinds(pairTransfers([sg, ft], new Set(['PEA Fortuneo']))), ['transfer']);
+});

@@ -183,7 +183,12 @@ export type AccountInput = {
   cash_balance: number;
   currency?: string;
   transfer_pattern?: string | null;
+  /** Point de départ des virements (voir transfersFromOnSave) ; aujourd'hui par défaut. */
+  transfers_from?: string;
 };
+
+/** Un libellé plus court capterait des opérations sans rapport (« PEA » ⊂ « PÉAGE »). */
+export const MIN_TRANSFER_PATTERN = 4;
 
 /** Crée ou met à jour un compte manuel ; renvoie son id. */
 export async function saveManualAccount(a: AccountInput): Promise<string> {
@@ -197,7 +202,7 @@ export async function saveManualAccount(a: AccountInput): Promise<string> {
     cash_updated_at: isoDay(new Date()),
     transfer_pattern: a.transfer_pattern?.trim() || null,
     // Le solde saisi inclut les virements déjà arrivés : on ne compte que ceux d'après.
-    transfers_from: isoDay(new Date()),
+    transfers_from: a.transfers_from ?? isoDay(new Date()),
   };
   const q = a.id
     ? supabase.from('manual_accounts').update(row).eq('id', a.id).select('id').single()

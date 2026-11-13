@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchMonthTx, useLoad } from '@/lib/data';
 import { type ListItem, groupByDay, pairTransfers } from '@/lib/transfers';
+import { fetchManualAccounts } from '@/lib/patrimoine';
 import { money, monthLabel } from '@/lib/format';
 import { bankShortName, useTheme } from '@/lib/theme';
 import { Chip, DayHeader, Empty, ErrorBox, Loading, TransferRow, TxRow } from '@/components/ui';
@@ -24,7 +25,10 @@ export default function Transactions() {
   const banks = useMemo(() => [...new Set((data ?? []).map((x) => x.bank))].sort((a, b) => a.localeCompare(b, 'fr')), [data]);
   const shown = useMemo(() => (data ?? []).filter((x) => bank === ALL || x.bank === bank), [data, bank]);
   // Virement SG → BNP : les deux opérations réunies en une ligne (totaux inchangés, les internes en sont exclus).
-  const sections = useMemo(() => groupByDay(pairTransfers(shown)), [shown]);
+  // Les virements vers un compte manuel (Livret A, PEA…) n'ont pas de contrepartie bancaire : jamais appariés.
+  const manual = useLoad(fetchManualAccounts, []);
+  const manualNames = useMemo(() => new Set((manual.data ?? []).map((m) => m.name)), [manual.data]);
+  const sections = useMemo(() => groupByDay(pairTransfers(shown, manualNames)), [shown, manualNames]);
 
   // Opération sans taux de change connu : exclue des totaux plutôt que comptée en euros.
   const spent = shown.filter((x) => !x.is_internal && x.amount < 0).reduce((sum, x) => sum + (x.amount_eur ?? 0), 0);

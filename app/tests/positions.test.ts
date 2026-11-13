@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canEditPrice, mergePosition, currentCash } from '../src/lib/positions.ts';
+import { canEditPrice, mergePosition, currentCash, transfersFromOnSave } from '../src/lib/positions.ts';
 
 test('canEditPrice : titre manuel → oui', () => {
   assert.equal(canEditPrice({ price_source: 'manual', last_price: 10, price_error: null }), true);
@@ -32,4 +32,11 @@ test('currentCash : solde saisi + virements depuis, taux manquant ignoré', () =
   assert.equal(currentCash({ cash_balance: 1000, transfers: -1000 }), 0);
   assert.equal(currentCash({ cash_balance: 0.1, transfers: 0.2 }), 0.3);
   assert.equal(currentCash({ cash_balance: 250, transfers: null }), 250);
+});
+
+test('transfersFromOnSave : un taux manquant garde le point de départ (aucun virement perdu)', () => {
+  assert.equal(transfersFromOnSave({ transfers: 120, transfers_from: '2026-11-01' }, '2026-11-13'), '2026-11-13');
+  assert.equal(transfersFromOnSave({ transfers: 0, transfers_from: '2026-11-01' }, '2026-11-13'), '2026-11-13');
+  assert.equal(transfersFromOnSave({ transfers: null, transfers_from: '2026-11-01' }, '2026-11-13'), '2026-11-01');
+  assert.equal(transfersFromOnSave(null, '2026-11-13'), '2026-11-13', 'nouveau compte');
 });

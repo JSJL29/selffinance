@@ -1,6 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { accountSeries, periodStart, totalSeries, type SnapshotRow } from '../src/lib/history.ts';
+import { accountSeries, fetchAllPages, periodStart, totalSeries, type SnapshotRow } from '../src/lib/history.ts';
+
+test('fetchAllPages : lit toutes les pages au-delà de la limite de 1000 lignes du serveur', async () => {
+  const all = Array.from({ length: 2500 }, (_, i) => i);
+  const calls: [number, number][] = [];
+  const got = await fetchAllPages(async (from, to) => { calls.push([from, to]); return all.slice(from, to + 1); }, 1000);
+  assert.equal(got.length, 2500);
+  assert.equal(got[2499], 2499, 'les jours les plus récents (fin de liste) sont présents');
+  assert.deepEqual(calls, [[0, 999], [1000, 1999], [2000, 2999]]);
+});
+
+test('fetchAllPages : page pleine exacte → une requête de plus, vide', async () => {
+  const all = Array.from({ length: 1000 }, (_, i) => i);
+  let n = 0;
+  const got = await fetchAllPages(async (from, to) => { n++; return all.slice(from, to + 1); }, 1000);
+  assert.equal(got.length, 1000);
+  assert.equal(n, 2);
+});
 
 const row = (date: string, ref: { bank?: string; manual?: string }, value: number | null, extra: Partial<SnapshotRow> = {}): SnapshotRow => ({
   date, bank_uid: ref.bank ?? null, manual_id: ref.manual ?? null, value_eur: value, invested_eur: null, missing: 0, ...extra,

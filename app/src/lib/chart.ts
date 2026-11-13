@@ -1,4 +1,15 @@
 // Géométrie des courbes (module pur, testé dans tests/chart.test.ts).
+import type { Point } from './history';
+
+/**
+ * Ce que montre la courbe : erreur (avec « Réessayer »), chargement, pas encore assez de points
+ * (« La courbe se remplit… »), ou la courbe. `points` null = en cours de chargement.
+ */
+export function chartState(points: Point[] | null, error: string | null): 'error' | 'loading' | 'empty' | 'ready' {
+  if (error) return 'error';
+  if (!points) return 'loading';
+  return points.filter((p) => p.value != null).length < 2 ? 'empty' : 'ready';
+}
 
 /** Domaine vertical : valeurs connues + 10 % de marge ; valeur constante → ligne au milieu ; rien → [0, 1]. */
 export function yDomain(values: (number | null)[]): [number, number] {

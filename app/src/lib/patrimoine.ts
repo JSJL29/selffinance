@@ -2,18 +2,33 @@
 import { supabase } from './supabase';
 import { functionError } from './data';
 import { isoDay } from './format';
-import type { SnapshotRow } from './history';
+import { fetchAllPages, type SnapshotRow } from './history';
 
-/** Photos quotidiennes du patrimoine depuis `from` (« AAAA-MM-JJ »), ou tout l'historique si null. */
-export async function fetchWealthHistory(from: string | null): Promise<SnapshotRow[]> {
-  let q = supabase.from('wealth_snapshots')
-    .select('date, bank_uid, manual_id, value_eur, invested_eur, missing')
-    .order('date', { ascending: true });
-  if (from) q = q.gte('date', from);
-  const { data, error } = await q;
-  if (error) throw error;
+/**
+ * Photos quotidiennes du patrimoine depuis `from` (« AAAA-MM-JJ »), ou tout l'historique si null.
+ * `only` : limite aux comptes d'une page (filtré par le serveur). Lu par pages (limite de 1000 lignes).
+ */
+export async function fetchWealthHistory(
+  from: string | null, only?: { bankUids?: string[]; manualId?: string },
+): Promise<SnapshotRow[]> {
+  if (only?.bankUids && !only.bankUids.length) return [];
+  const data = await fetchAllPages(async (start, end) => {
+    let q = supabase.from('wealth_snapshots')
+      .select('date, bank_uid, manual_id, value_eur, invested_eur, missing')
+      // ordre total et stable : indispensable pour que les pages ne se chevauchent pas
+      .order('date', { ascending: true })
+      .order('bank_uid', { ascending: true, nullsFirst: true })
+      .order('manual_id', { ascending: true, nullsFirst: true })
+      .range(start, end);
+    if (from) q = q.gte('date', from);
+    if (only?.bankUids) q = q.in('bank_uid', only.bankUids);
+    if (only?.manualId) q = q.eq('manual_id', only.manualId);
+    const { data: rows, error } = await q;
+    if (error) throw error;
+    return rows ?? [];
+  });
   const num = (v: unknown) => (v == null ? null : Number(v));
-  return (data ?? []).map((r) => ({
+  return data.map((r) => ({
     date: r.date as string,
     bank_uid: (r.bank_uid as string | null) ?? null,
     manual_id: (r.manual_id as string | null) ?? null,

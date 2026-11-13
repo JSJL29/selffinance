@@ -28,8 +28,11 @@ export default function AccountDetail() {
 
   // Historique (photo de 22 h) du groupe : somme de ses comptes (ex. Revolut EUR + USD).
   const [period, setPeriod] = useState<Period>('3M');
-  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period]);
   const uidKey = uids.join(',');
+  const history = useLoad(
+    () => fetchWealthHistory(periodStart(period, isoDay(new Date())), { bankUids: uidKey ? uidKey.split(',') : [] }),
+    [period, uidKey],
+  );
   const curve = useMemo(() => {
     const mine = new Set(uidKey.split(','));
     return accountSeries(history.data ?? [], (r) => mine.has(r.bank_uid ?? ''), 'value_eur');
@@ -64,7 +67,8 @@ export default function AccountDetail() {
                   </Text>
                 ))}
                 <View style={s.chart}>
-                  <LineChart series={[{ points: curve, label: 'Solde' }]} />
+                  <LineChart series={[{ points: curve, label: 'Solde' }]}
+                    loading={!history.data} error={history.error} onRetry={history.reload} />
                   <PeriodPicker value={period} onChange={setPeriod} />
                 </View>
                 <BalanceEditor account={group.members[0]} onSaved={accounts.reload} />

@@ -70,7 +70,8 @@ export default function Patrimoine() {
             <Text style={[s.small, { color: t.muted }]}>Cours mis à jour {ago(quotedAt.data)}</Text>
           )}
           <View style={s.chart}>
-            <LineChart series={[{ points: totalCurve, label: 'Total' }]} />
+            <LineChart series={[{ points: totalCurve, label: 'Total' }]}
+              loading={!history.data} error={history.error} onRetry={history.reload} />
             <PeriodPicker value={period} onChange={setPeriod} />
           </View>
           <Pressable onPress={() => router.push('/patrimoine/tax')} hitSlop={8} style={s.taxLink}>

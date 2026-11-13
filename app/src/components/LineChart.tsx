@@ -1,8 +1,9 @@
 // Courbe de l'historique (react-native-svg). Toute la géométrie vient de src/lib/chart.ts (testé).
 import { useMemo, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line, Path, Text as SvgText } from 'react-native-svg';
-import { compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '@/lib/chart';
+import { chartState, compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '@/lib/chart';
+import { ErrorBox } from '@/components/ui';
 import { money, shortDate } from '@/lib/format';
 import { PERIODS, type Period, type Point } from '@/lib/history';
 import { useTheme } from '@/lib/theme';
@@ -11,14 +12,17 @@ export type Series = { points: Point[]; dashed?: boolean; label: string };
 
 const PAD = { left: 48, right: 8, top: 10, bottom: 22 };
 
-export function LineChart({ series, height = 180 }: { series: Series[]; height?: number }) {
+/** `loading` : données en cours de chargement ; `error` : échec de lecture (affiché avec « Réessayer »). */
+export function LineChart({ series, height = 180, loading = false, error = null, onRetry }: {
+  series: Series[]; height?: number; loading?: boolean; error?: string | null; onRetry?: () => void;
+}) {
   const t = useTheme();
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<number | null>(null);
 
   // Axe X : les dates de la 1re série ; les autres séries s'alignent sur ces dates.
   const dates = useMemo(() => series[0]?.points.map((p) => p.date) ?? [], [series]);
-  const known = series[0]?.points.filter((p) => p.value != null).length ?? 0;
+  const state = chartState(loading ? null : series[0]?.points ?? [], error);
 
   const geo = useMemo(() => {
     const all = series.flatMap((s) => s.points.map((p) => p.value));
@@ -50,7 +54,15 @@ export function LineChart({ series, height = 180 }: { series: Series[]; height?:
     });
   }, [xs]);
 
-  if (known < 2) {
+  if (state === 'error') return <ErrorBox message={error ?? 'Historique indisponible.'} onRetry={onRetry} />;
+  if (state === 'loading') {
+    return (
+      <View style={[s.empty, { height: height / 2, borderColor: 'transparent' }]}>
+        <ActivityIndicator color={t.primary} />
+      </View>
+    );
+  }
+  if (state === 'empty') {
     return (
       <View style={[s.empty, { height: height / 2, borderColor: t.border }]}>
         <Text style={{ color: t.muted, fontSize: 13 }}>La courbe se remplit chaque soir à 22 h.</Text>

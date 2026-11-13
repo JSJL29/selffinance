@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '../src/lib/chart.ts';
+import { chartState, compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '../src/lib/chart.ts';
+
+test('chartState : erreur et chargement ne sont pas confondus avec « pas encore de données »', () => {
+  const two = [{ date: '2026-11-12', value: 1, doubtful: false }, { date: '2026-11-13', value: 2, doubtful: false }];
+  assert.equal(chartState(null, 'Réseau indisponible'), 'error');
+  assert.equal(chartState(two, 'Réseau indisponible'), 'error');
+  assert.equal(chartState(null, null), 'loading');
+  assert.equal(chartState([two[0]], null), 'empty');
+  assert.equal(chartState([{ ...two[0], value: null }, two[1]], null), 'empty');
+  assert.equal(chartState(two, null), 'ready');
+});
 
 test('compactEuro : graduations courtes', () => {
   assert.equal(compactEuro(40000), '40 k€');

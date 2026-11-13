@@ -33,6 +33,19 @@ export function periodStart(period: Period, today: string): string | null {
   return `${first.getUTCFullYear()}-${pad(first.getUTCMonth() + 1)}-${pad(Math.min(d, daysInMonth))}`;
 }
 
+/**
+ * Lit toutes les pages d'une requête : le serveur renvoie au plus 1000 lignes (max_rows), et l'historique
+ * compte une ligne par compte et par jour. Sans cela, les jours les plus récents disparaîtraient.
+ */
+export async function fetchAllPages<T>(page: (from: number, to: number) => Promise<T[]>, size = 1000): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += size) {
+    const rows = await page(from, from + size - 1);
+    out.push(...rows);
+    if (rows.length < size) return out;
+  }
+}
+
 /** Somme par jour des lignes retenues, par date croissante. */
 function sumByDay(rows: SnapshotRow[], keep: (r: SnapshotRow) => boolean, field: 'value_eur' | 'invested_eur'): Point[] {
   const days = new Map<string, { sum: number; known: number; doubtful: boolean }>();

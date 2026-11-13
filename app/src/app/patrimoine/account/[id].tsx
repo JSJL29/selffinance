@@ -28,7 +28,7 @@ export default function ManualAccountDetail() {
 
   // Historique (photo de 22 h) : valeur, et montant investi en pointillés pour un placement.
   const [period, setPeriod] = useState<Period>('3M');
-  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period]);
+  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date())), { manualId: id }), [period, id]);
   const isInvestment = account.data?.kind === 'investment';
   const curves = useMemo<Series[]>(() => {
     const mine = (r: { manual_id: string | null }) => r.manual_id === id;
@@ -84,7 +84,7 @@ export default function ManualAccountDetail() {
               <Text style={[s.small, { color: t.muted }]}>Cours mis à jour {ago(quotedAt.data)} · tire pour rafraîchir</Text>
             )}
             <View style={s.chart}>
-              <LineChart series={curves} />
+              <LineChart series={curves} loading={!history.data} error={history.error} onRetry={history.reload} />
               <PeriodPicker value={period} onChange={setPeriod} />
             </View>
 

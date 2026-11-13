@@ -12,7 +12,7 @@ import { type Period, periodStart, totalSeries } from '@/lib/history';
 import { ago, isoDay, money, pct } from '@/lib/format';
 import { LineChart, PeriodPicker } from '@/components/LineChart';
 import { useTheme } from '@/lib/theme';
-import { ErrorBox, Loading } from '@/components/ui';
+import { BankDot, ErrorBox, Loading } from '@/components/ui';
 import { showAlert } from '@/lib/dialog';
 
 /** Onglet Patrimoine : total général, plus-value des placements, comptes par catégorie. */
@@ -169,6 +169,7 @@ function AccountRow({ a }: { a: ManualAccount }) {
     <Pressable
       onPress={() => router.push({ pathname: '/patrimoine/account/[id]', params: { id: a.id } })}
       style={({ pressed }) => [s.row, { backgroundColor: pressed ? t.border : t.card, borderColor: t.border }]}>
+      {!!a.institution && <BankDot bank={a.institution} />}
       <View style={s.grow}>
         <Text style={[s.name, { color: t.text }]} numberOfLines={1}>{a.name}</Text>
         <Text style={[s.small, { color: t.muted }]} numberOfLines={1}>{sub}</Text>

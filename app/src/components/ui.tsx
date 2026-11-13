@@ -1,11 +1,23 @@
-import { memo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { bankMeta, bankShortName, useTheme } from '@/lib/theme';
 import { dayLabel, money } from '@/lib/format';
-import { Tx, txSubtitle, txTitle } from '@/lib/data';
+import { Tx, txSubtitle, txTitle, useBankLogo } from '@/lib/data';
 
+/** Logo officiel de la banque (Enable Banking), sinon pastille à initiales (logo absent ou en erreur). */
 export function BankDot({ bank, size = 36 }: { bank: string; size?: number }) {
   const m = bankMeta(bank);
+  const logo = useBankLogo(bank);
+  const [broken, setBroken] = useState<string | null>(null);
+  if (logo && broken !== logo) {
+    // fond blanc : les logos transparents restent lisibles en mode sombre
+    return (
+      <View style={[s.logoBox, { width: size, height: size, borderRadius: size * 0.3, padding: size * 0.12 }]}>
+        <Image source={{ uri: logo }} style={s.logoImg} resizeMode="contain" onError={() => setBroken(logo)}
+          accessibilityLabel={bank} />
+      </View>
+    );
+  }
   return (
     <View style={[s.dot, { width: size, height: size, borderRadius: size * 0.3, backgroundColor: m.color }]}>
       <Text style={[s.dotText, { fontSize: m.short.length > 2 ? size * 0.3 : size * 0.36 }]}>{m.short}</Text>
@@ -78,6 +90,8 @@ export function Empty({ text }: { text: string }) {
 
 const s = StyleSheet.create({
   dot: { alignItems: 'center', justifyContent: 'center' },
+  logoBox: { backgroundColor: '#FFFFFF', overflow: 'hidden' },
+  logoImg: { width: '100%', height: '100%' },
   dotText: { color: '#fff', fontWeight: '700' },
   day: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 20, paddingTop: 18, paddingBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, marginHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth },

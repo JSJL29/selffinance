@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { type BankLogoEntry, logoFor } from './logos';
 import { isoDay } from './format';
 
 export type AccountRow = {
@@ -188,6 +189,28 @@ export async function functionError(error: unknown): Promise<string> {
   const res = (error as { context?: Response }).context;
   const body = res ? await res.json().catch(() => null) : null;
   return body?.error ?? (error as Error).message ?? String(error);
+}
+
+// Logos officiels des banques : liste Enable Banking chargée une fois par lancement, partagée par toutes
+// les pastilles. Échec (hors ligne…) → liste vide, les pastilles à initiales restent ; nouvel essai plus tard.
+let logosPromise: Promise<BankLogoEntry[]> | null = null;
+export function loadBankLogos(): Promise<BankLogoEntry[]> {
+  logosPromise ??= fetchAspsps('FR').then(
+    (list) => list.map((a) => ({ name: a.name, logo: a.logo })),
+    () => { logosPromise = null; return []; },
+  );
+  return logosPromise;
+}
+
+/** Logo officiel de la banque (null tant qu'il n'est pas connu, ou s'il n'existe pas). */
+export function useBankLogo(name: string): string | null {
+  const [list, setList] = useState<BankLogoEntry[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    loadBankLogos().then((l) => { if (alive) setList(l); });
+    return () => { alive = false; };
+  }, []);
+  return useMemo(() => (list ? logoFor(name, list) : null), [list, name]);
 }
 
 export async function fetchAspsps(country = 'FR'): Promise<Aspsp[]> {

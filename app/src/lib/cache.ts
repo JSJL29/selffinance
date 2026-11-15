@@ -12,6 +12,7 @@ const INDEX = `${PREFIX}__keys`;
 
 /** Stockage indisponible ou copie illisible : on fait comme s'il n'y avait pas de copie, sans jamais lever d'erreur. */
 export function createCache(storage: KeyValueStorage, now: () => string = () => new Date().toISOString()) {
+  let generation = 0;
   const keys = (): string[] => {
     try {
       const raw = storage.getItem(INDEX);
@@ -33,14 +34,20 @@ export function createCache(storage: KeyValueStorage, now: () => string = () => 
         return null;
       }
     },
-    write<T>(key: string, data: T): void {
+    /** Numéro qui change à chaque effacement : à relever au départ d'une requête, à rendre à `write`. */
+    generation: () => generation,
+    /** `gen` : génération au départ de la requête ; si la session a été effacée depuis, rien n'est écrit. */
+    write<T>(key: string, data: T, gen: number = generation): void {
+      if (gen !== generation) return;
       try {
-        storage.setItem(PREFIX + key, JSON.stringify({ at: now(), data }));
+        // L'index d'abord : une copie écrite est toujours connue de clear().
         const list = keys();
         if (!list.includes(key)) storage.setItem(INDEX, JSON.stringify([...list, key]));
+        storage.setItem(PREFIX + key, JSON.stringify({ at: now(), data }));
       } catch { /* stockage plein ou indisponible : pas de copie */ }
     },
     clear(): void {
+      generation++;
       try {
         for (const k of keys()) storage.removeItem(PREFIX + k);
         storage.removeItem(INDEX);

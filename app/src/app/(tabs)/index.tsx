@@ -61,7 +61,7 @@ export default function Accounts() {
 /** Synchro manuelle des banques, dans la limite du budget du jour (4 accès, automatiques compris). */
 function SyncButton({ onDone }: { onDone: () => Promise<void> }) {
   const t = useTheme();
-  const budget = useLoad(fetchSyncBudget, [], 'syncBudget');
+  const budget = useLoad(fetchSyncBudget, []);
   const [busy, setBusy] = useState(false);
   const left = budget.data?.manual_left ?? null;
   const disabled = busy || !left;

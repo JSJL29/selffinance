@@ -328,13 +328,16 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], key?: string) 
   const lastRequest = useRef(0);
   const load = useCallback(async () => {
     const req = ++lastRequest.current;
+    // Clé et génération relevées au départ : la réponse s'écrit sous la clé demandée, et pas après une déconnexion.
+    const key = keyRef.current;
+    const gen = appCache.generation();
     try {
       const result = await fnRef.current();
       if (req !== lastRequest.current) return;
       setData(result);
       setError(null);
       shownAt.current = new Date().toISOString();
-      if (keyRef.current) appCache.write(keyRef.current, result);
+      if (key) appCache.write(key, result, gen);
       staleStore.setStale(id, null);
     } catch (e) {
       if (req !== lastRequest.current) return;

@@ -43,3 +43,22 @@ test('cache : clear efface toutes les copies (déconnexion), rien d’autre', ()
   assert.equal(c.read('tx:2026-11'), null);
   assert.deepEqual([...s.m.keys()].sort(), ['sb-session', 'transactions.hideInternal']);
 });
+
+test('cache : une réponse partie avant la déconnexion ne recrée pas de copie', () => {
+  const c = createCache(memory(), () => at);
+  const gen = c.generation(); // requête lancée
+  c.clear(); // déconnexion pendant la requête
+  c.write('comptes', [1], gen); // la réponse arrive
+  assert.equal(c.read('comptes'), null);
+  c.write('comptes', [2], c.generation());
+  assert.deepEqual(c.read('comptes')?.data, [2]);
+});
+
+test('cache : copie à moitié écrite (stockage plein) quand même effacée à la déconnexion', () => {
+  const s = memory();
+  const c = createCache({ ...s, setItem: (k: string, v: string) => { if (k === 'cache.v1.__keys' && v.includes('gros')) throw new Error('plein'); s.setItem(k, v); } }, () => at);
+  c.write('gros', [1]);
+  c.write('petit', [2]);
+  c.clear();
+  assert.deepEqual([...s.m.keys()], []);
+});

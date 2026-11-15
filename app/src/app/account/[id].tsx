@@ -81,7 +81,7 @@ export default function AccountDetail() {
         }
         renderSectionHeader={({ section }) => <DayHeader iso={section.title} />}
         renderItem={({ item }) => <TxRow tx={item} />}
-        ListEmptyComponent={txs.data ? <Empty text="Aucune opération." /> : <Loading />}
+        ListEmptyComponent={txs.data ? <Empty text="Aucune opération." /> : <Loading compact />}
         contentContainerStyle={{ paddingBottom: 32 }}
       />
     </SafeAreaView>

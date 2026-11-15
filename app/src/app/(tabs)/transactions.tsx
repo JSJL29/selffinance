@@ -93,7 +93,7 @@ export default function Transactions() {
         renderItem={({ item }) => (item.kind === 'tx'
           ? <TxRow tx={item.tx} showBank />
           : <TransferRow out={item.out} in={item.in} />)}
-        ListEmptyComponent={data ? <Empty text="Aucune opération ce mois-ci." /> : <Loading />}
+        ListEmptyComponent={data ? <Empty text="Aucune opération ce mois-ci." /> : <Loading compact />}
         contentContainerStyle={{ paddingBottom: 32 }}
       />
     </SafeAreaView>

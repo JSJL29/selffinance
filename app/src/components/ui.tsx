@@ -1,8 +1,9 @@
 import { memo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { bankMeta, bankShortName, useTheme } from '@/lib/theme';
 import { dayLabel, money } from '@/lib/format';
 import { Tx, txSubtitle, txTitle, useBankLogo } from '@/lib/data';
+import { LogoLoader } from '@/components/LogoLoader';
 
 /** Logo officiel de la banque (Enable Banking), sinon pastille à initiales (logo absent ou en erreur). */
 export function BankDot({ bank, size = 36 }: { bank: string; size?: number }) {
@@ -94,9 +95,16 @@ export function Centered({ children }: { children: React.ReactNode }) {
   return <View style={s.centered}>{children}</View>;
 }
 
-export function Loading() {
+/** Chargement : le logo SF se trace en boucle ; `compact` pour une liste (plus petit, sans texte). */
+export function Loading({ compact = false }: { compact?: boolean }) {
   const t = useTheme();
-  return <Centered><ActivityIndicator color={t.primary} /></Centered>;
+  if (compact) return <View style={s.compact}><LogoLoader size={64} /></View>;
+  return (
+    <Centered>
+      <LogoLoader />
+      <Text style={{ color: t.muted, fontSize: 13, marginTop: 10 }}>Chargement…</Text>
+    </Centered>
+  );
 }
 
 export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
@@ -131,5 +139,6 @@ const s = StyleSheet.create({
   amount: { fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  compact: { alignItems: 'center', paddingVertical: 32 },
   error: { borderWidth: 1, borderRadius: 12, padding: 14, margin: 16 },
 });

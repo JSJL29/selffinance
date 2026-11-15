@@ -120,16 +120,18 @@ function Offline({ onRetry }: { onRetry?: () => unknown }) {
   const [id] = useState(() => ++nextOfflineId);
   const retry = useRef(onRetry);
   useLayoutEffect(() => { retry.current = onRetry; });
+  const hasRetry = !!onRetry;
   useEffect(() => {
-    offlineStore.register(id, () => retry.current?.(), false);
+    offlineStore.register(id, hasRetry ? () => retry.current?.() : null, false);
     return () => offlineStore.unregister(id);
-  }, [id]);
-  useEffect(() => { offlineStore.setFocused(id, focused); }, [id, focused]);
+  }, [id, hasRetry]);
+  useEffect(() => { offlineStore.setFocused(id, focused); }, [id, focused, hasRetry]);
   const leader = useSyncExternalStore(offlineStore.subscribe, offlineStore.leader, offlineStore.leader);
-  return leader === id ? <OfflinePanel /> : null;
+  const canRetry = useSyncExternalStore(offlineStore.subscribe, offlineStore.canRetry, offlineStore.canRetry);
+  return leader === id ? <OfflinePanel canRetry={canRetry} /> : null;
 }
 
-function OfflinePanel() {
+function OfflinePanel({ canRetry }: { canRetry: boolean }) {
   const t = useTheme();
   const [left, setLeft] = useState(RETRY_SECONDS);
   const [trying, setTrying] = useState(false);
@@ -152,6 +154,7 @@ function OfflinePanel() {
 
   useEffect(() => {
     alive.current = true;
+    if (!canRetry) return () => { alive.current = false; };
     const timer = setInterval(() => {
       if (busy.current) return;
       remaining.current -= 1;
@@ -159,18 +162,24 @@ function OfflinePanel() {
       else setLeft(remaining.current);
     }, 1000);
     return () => { alive.current = false; clearInterval(timer); };
-  }, [run]);
+  }, [run, canRetry]);
 
   return (
     <View style={s.offline}>
       <LogoLoader size={96} offline />
       <Text style={{ color: t.text, fontSize: 16, fontWeight: '600', marginTop: 8 }}>Pas de connexion</Text>
-      <Text style={{ color: t.muted, fontSize: 13 }}>
-        {trying ? 'Nouvel essai…' : `Nouvel essai automatique dans ${left} s`}
-      </Text>
-      <Pressable onPress={run} disabled={trying} hitSlop={8} style={[s.retry, { borderColor: t.primary }]}>
-        <Text style={{ color: t.primary, fontWeight: '600' }}>Réessayer</Text>
-      </Pressable>
+      {canRetry ? (
+        <>
+          <Text style={{ color: t.muted, fontSize: 13 }}>
+            {trying ? 'Nouvel essai…' : `Nouvel essai automatique dans ${left} s`}
+          </Text>
+          <Pressable onPress={run} disabled={trying} hitSlop={8} style={[s.retry, { borderColor: t.primary }]}>
+            <Text style={{ color: t.primary, fontWeight: '600' }}>Réessayer</Text>
+          </Pressable>
+        </>
+      ) : (
+        <Text style={{ color: t.muted, fontSize: 13 }}>Vérifie ta connexion puis reviens sur cet écran.</Text>
+      )}
     </View>
   );
 }

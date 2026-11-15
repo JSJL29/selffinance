@@ -15,7 +15,7 @@ import { BackLink, Field, PrimaryButton, currencySymbol } from '@/components/for
 export default function Sell() {
   const { positionId } = useLocalSearchParams<{ positionId: string }>();
   const pos = useLoad(() => fetchPosition(positionId), [positionId]);
-  if (pos.error) return <ErrorBox message={pos.error} />;
+  if (pos.error) return <ErrorBox message={pos.error} onRetry={pos.reload} />;
   if (!pos.data) return <Loading />;
   return <SellForm key={pos.data.id} p={pos.data} />;
 }

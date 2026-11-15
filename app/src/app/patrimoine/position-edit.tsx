@@ -30,7 +30,7 @@ export default function PositionEdit() {
   const { accountId, id } = useLocalSearchParams<{ accountId: string; id?: string }>();
   const existing = useLoad(() => (id ? fetchPosition(id) : Promise.resolve(null)), [id]);
   if (!id) return <NewForm accountId={accountId} />;
-  if (existing.error) return <Screen title="Position"><ErrorBox message={existing.error} /></Screen>;
+  if (existing.error) return <Screen title="Position"><ErrorBox message={existing.error} onRetry={existing.reload} /></Screen>;
   if (!existing.data) return <Loading />;
   return <EditForm key={existing.data.id} p={existing.data} />;
 }

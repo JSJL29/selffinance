@@ -39,7 +39,10 @@ export function cycle(t: number): { progress: number; opacity: number } {
   return { progress, opacity };
 }
 
-/** Message d'une coupure réseau (fetch React Native, navigateur, Node) — pas une erreur du serveur. */
+/**
+ * Message d'une coupure réseau (fetch React Native, navigateur, Node) — pas une erreur du serveur :
+ * « statement timeout » (Postgres) ou « upstream request timeout » restent des erreurs, affichées en rouge.
+ */
 export function isNetworkError(message: string | null): boolean {
-  return !!message && /network ?request failed|failed to fetch|networkerror|fetch failed|timed out|timeout/i.test(message);
+  return !!message && /network ?request failed|failed to fetch|networkerror|fetch failed|request timed out/i.test(message);
 }

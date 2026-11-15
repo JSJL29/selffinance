@@ -35,7 +35,8 @@ test('isNetworkError : coupure réseau seulement', () => {
     assert.equal(isNetworkError(m), true, m);
   }
   for (const m of [null, 'permission denied for table accounts', 'Clé Enable Banking invalide',
-    'Edge Function returned a non-2xx status code']) {
+    'Edge Function returned a non-2xx status code', 'canceling statement due to statement timeout',
+    'upstream request timeout']) {
     assert.equal(isNetworkError(m), false, String(m));
   }
 });

@@ -20,18 +20,18 @@ export default function AccountEdit() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const existing = useLoad(() => (id ? fetchManualAccount(id) : Promise.resolve(null)), [id]);
   if (!id) return <AccountForm key="new" account={null} />;
-  if (existing.error) return <Gone message={existing.error} />;
+  if (existing.error) return <Gone message={existing.error} onRetry={existing.reload} />;
   if (!existing.data) return <Loading />;
   return <AccountForm key={existing.data.id} account={existing.data} />;
 }
 
 /** Compte introuvable (supprimé) : message + retour à l'onglet. */
-function Gone({ message }: { message: string }) {
+function Gone({ message, onRetry }: { message: string; onRetry: () => unknown }) {
   const t = useTheme();
   return (
     <SafeAreaView edges={['top']} style={[s.flex, { backgroundColor: t.bg }]}>
       <View style={s.content}>
-        <ErrorBox message={message} />
+        <ErrorBox message={message} onRetry={onRetry} />
         <PrimaryButton label="Retour au Patrimoine" onPress={() => router.dismissTo('/patrimoine')} />
       </View>
     </SafeAreaView>

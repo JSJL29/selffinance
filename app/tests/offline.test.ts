@@ -39,3 +39,13 @@ test('subscribe : prévenu à chaque changement, plus après désabonnement', ()
   s.register(2, () => undefined, true);
   assert.equal(n, 3);
 });
+
+test('canRetry : pas de compte à rebours si aucun bloc de la page ne sait se recharger', () => {
+  const s = createOfflineStore();
+  s.register(1, null, true);
+  assert.equal(s.canRetry(), false);
+  s.register(2, () => undefined, false); // autre écran : ne compte pas
+  assert.equal(s.canRetry(), false);
+  s.setFocused(2, true);
+  assert.equal(s.canRetry(), true);
+});

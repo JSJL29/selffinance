@@ -36,7 +36,7 @@ export default function Tax() {
         </View>
 
         {summary.error && <ErrorBox message={summary.error} onRetry={summary.reload} />}
-        {!s ? <Loading /> : (
+        {!s ? (summary.error ? null : <Loading />) : (
           <>
             <Card title="CTO · imposable">
               {cto.length === 0 && <Line label="Aucune vente sur un CTO" value="" />}

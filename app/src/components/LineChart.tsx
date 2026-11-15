@@ -1,10 +1,10 @@
 // Courbe de l'historique (react-native-svg). Toute la géométrie vient de src/lib/chart.ts (testé).
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { ActivityIndicator, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Line, Path, Text as SvgText } from 'react-native-svg';
-import { chartState, compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '@/lib/chart';
+import Svg, { ClipPath, Defs, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import { chartState, linePath, nearestIndex, niceTicks, scale, tickLabel, variation, yDomain } from '@/lib/chart';
 import { ErrorBox } from '@/components/ui';
-import { money, shortDate } from '@/lib/format';
+import { money, pct, shortDate } from '@/lib/format';
 import { PERIODS, type Period, type Point } from '@/lib/history';
 import { useTheme } from '@/lib/theme';
 
@@ -24,9 +24,12 @@ export function LineChart({ series, height = 180, loading = false, error = null,
   const dates = useMemo(() => series[0]?.points.map((p) => p.date) ?? [], [series]);
   const state = chartState(loading ? null : series[0]?.points ?? [], error);
 
+  // Échelle calée sur la 1re série seule (la valeur) : ses variations remplissent la hauteur. Les autres
+  // (montant investi, souvent loin en dessous) sont coupées au cadre ; leur valeur reste dans la bulle.
+  const clipId = `plot${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const change = useMemo(() => variation(series[0]?.points ?? []), [series]);
   const geo = useMemo(() => {
-    const all = series.flatMap((s) => s.points.map((p) => p.value));
-    const [lo, hi] = yDomain(all);
+    const [lo, hi] = yDomain(series[0]?.points.map((p) => p.value) ?? []);
     const x = scale([0, Math.max(dates.length - 1, 1)], [PAD.left, Math.max(width - PAD.right, PAD.left + 1)]);
     const y = scale([lo, hi], [height - PAD.bottom, PAD.top]);
     const xs = dates.map((_, i) => x(i));
@@ -37,7 +40,9 @@ export function LineChart({ series, height = 180, loading = false, error = null,
         return { x: xs[i], y: v == null ? null : y(v) };
       }));
     });
-    return { xs, y, paths, ticks: niceTicks(lo, hi) };
+    const ticks = niceTicks(lo, hi);
+    const step = ticks.length > 1 ? ticks[1] - ticks[0] : Math.abs(hi - lo);
+    return { xs, y, paths, ticks, labels: ticks.map((v) => tickLabel(v, step)) };
   }, [series, dates, width, height]);
 
   // Le doigt sur la courbe : point le plus proche (sans bloquer le défilement vertical de l'écran).
@@ -72,17 +77,30 @@ export function LineChart({ series, height = 180, loading = false, error = null,
 
   const colors = [t.primary, t.muted];
   const at = active != null && active >= 0 ? active : null;
+  const changeColor = !change || change.abs === 0 ? t.muted : change.abs > 0 ? t.success : t.danger;
 
   return (
+    <View>
+      {change && (
+        <Text style={[s.change, { color: changeColor }]}>
+          {money(change.abs, 'EUR', { sign: true })}{change.pct != null ? ` (${pct(change.pct)})` : ''}
+          <Text style={{ color: t.muted, fontWeight: '400' }}> depuis le {shortDate(change.from)}</Text>
+        </Text>
+      )}
     <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} {...responder.panHandlers}>
       {width > 0 && (
         <Svg width={width} height={height}>
+          <Defs>
+            <ClipPath id={clipId}>
+              <Rect x={PAD.left} y={PAD.top} width={Math.max(width - PAD.left - PAD.right, 1)} height={height - PAD.top - PAD.bottom} />
+            </ClipPath>
+          </Defs>
           {geo.ticks.map((v) => (
             <Line key={`g${v}`} x1={PAD.left} x2={width - PAD.right} y1={geo.y(v)} y2={geo.y(v)} stroke={t.border} strokeWidth={1} />
           ))}
-          {geo.ticks.map((v) => (
+          {geo.ticks.map((v, i) => (
             <SvgText key={`l${v}`} x={PAD.left - 6} y={geo.y(v) + 4} fontSize={10} fill={t.muted} textAnchor="end">
-              {compactEuro(v)}
+              {geo.labels[i]}
             </SvgText>
           ))}
           <SvgText x={PAD.left} y={height - 6} fontSize={10} fill={t.muted}>{shortDate(dates[0])}</SvgText>
@@ -91,6 +109,7 @@ export function LineChart({ series, height = 180, loading = false, error = null,
           </SvgText>
           {geo.paths.map((d, i) => (
             <Path key={series[i].label} d={d} fill="none" stroke={colors[i % colors.length]} strokeWidth={2}
+              clipPath={i > 0 ? `url(#${clipId})` : undefined}
               strokeDasharray={series[i].dashed ? '5 4' : undefined} strokeLinejoin="round" strokeLinecap="round" />
           ))}
           {at != null && (
@@ -103,6 +122,7 @@ export function LineChart({ series, height = 180, loading = false, error = null,
           <Text style={[s.bubbleText, { color: t.text }]}>{bubble(series, dates[at])}</Text>
         </View>
       )}
+    </View>
     </View>
   );
 }
@@ -136,6 +156,7 @@ const s = StyleSheet.create({
   empty: { alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, borderStyle: 'dashed' },
   bubble: { position: 'absolute', top: 0, alignSelf: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
   bubbleText: { fontSize: 13, fontWeight: '600' },
+  change: { fontSize: 13, fontWeight: '600', marginBottom: 6, fontVariant: ['tabular-nums'] },
   periods: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   period: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
 });

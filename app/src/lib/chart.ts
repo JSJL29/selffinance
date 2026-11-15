@@ -49,6 +49,29 @@ export function compactEuro(v: number): string {
   return `${v < 0 ? '−' : ''}${s} ${unit}`;
 }
 
+/**
+ * Libellé d'une graduation, assez précis pour que deux graduations voisines (écart `step`) diffèrent :
+ * forme courte (« 40 k€ ») pour les grands pas, montant entier ou décimal (« 43 225 € ») quand la courbe est zoomée.
+ */
+export function tickLabel(v: number, step: number): string {
+  const unit = Math.abs(v) >= 1e6 ? 1e6 : 1000;
+  if (step >= unit / 10) return compactEuro(v);
+  const decimals = step >= 1 ? 0 : Math.min(2, Math.ceil(-Math.log10(step) - 1e-9));
+  const s = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    .format(Math.abs(v)).replace(/\s/g, ' ');
+  return `${v < 0 ? '−' : ''}${s} €`;
+}
+
+/** Variation du premier au dernier point connu (montant au centime, part en fraction) ; null s'il en manque. */
+export function variation(points: Point[]): { abs: number; pct: number | null; from: string } | null {
+  const known = points.filter((p): p is Point & { value: number } => p.value != null && Number.isFinite(p.value));
+  if (known.length < 2) return null;
+  const first = known[0];
+  const last = known[known.length - 1];
+  const abs = Math.round((last.value - first.value) * 100) / 100;
+  return { abs, pct: first.value === 0 ? null : (last.value - first.value) / Math.abs(first.value), from: first.date };
+}
+
 const n = (v: number) => String(Math.round(v * 10) / 10);
 
 /** Tracé SVG ; un point sans valeur coupe le trait (trou, jamais un zéro). */

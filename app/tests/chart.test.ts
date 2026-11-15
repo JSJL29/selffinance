@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chartState, compactEuro, linePath, nearestIndex, niceTicks, scale, yDomain } from '../src/lib/chart.ts';
+import { chartState, compactEuro, linePath, nearestIndex, niceTicks, scale, tickLabel, variation, yDomain } from '../src/lib/chart.ts';
 
 test('chartState : erreur et chargement ne sont pas confondus avec « pas encore de données »', () => {
   const two = [{ date: '2026-11-12', value: 1, doubtful: false }, { date: '2026-11-13', value: 2, doubtful: false }];
@@ -58,4 +58,28 @@ test('nearestIndex : point le plus proche du doigt', () => {
   assert.equal(nearestIndex([0, 10, 20], 14), 1);
   assert.equal(nearestIndex([0, 10, 20], 16), 2);
   assert.equal(nearestIndex([], 3), -1);
+});
+
+test('tickLabel : graduations distinctes même quand la courbe est très zoomée', () => {
+  // Patrimoine de 43 216 € qui bouge de 15 € : pas de 5 €, jamais « 43,2 k€ » trois fois.
+  const ticks = niceTicks(43215, 43233);
+  const labels = ticks.map((v) => tickLabel(v, ticks[1] - ticks[0]));
+  assert.equal(new Set(labels).size, labels.length, labels.join(' | '));
+  assert.equal(tickLabel(43225, 5), '43 225 €');
+  assert.equal(tickLabel(4652.5, 0.5), '4 652,5 €');
+  // Grands pas : forme courte inchangée.
+  assert.equal(tickLabel(40000, 10000), '40 k€');
+  assert.equal(tickLabel(2500, 500), '2,5 k€');
+  assert.equal(tickLabel(-1000, 1000), '−1 k€');
+});
+
+test('variation : du premier au dernier point connu', () => {
+  const p = (date: string, value: number | null) => ({ date, value, doubtful: false });
+  const v = variation([p('2026-11-12', null), p('2026-11-13', 4652.32), p('2026-11-14', 4660.87), p('2026-11-15', null)]);
+  assert.ok(v);
+  assert.equal(v.abs, 8.55);
+  assert.ok(Math.abs((v.pct ?? 0) - 8.55 / 4652.32) < 1e-12);
+  assert.equal(v.from, '2026-11-13');
+  assert.equal(variation([p('2026-11-13', 10)]), null, 'un seul point : pas de variation');
+  assert.equal(variation([p('2026-11-13', 0), p('2026-11-14', 5)])?.pct, null, 'départ à 0 : pas de pourcentage');
 });

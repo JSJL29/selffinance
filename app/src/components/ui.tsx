@@ -1,4 +1,7 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useIsFocused } from 'expo-router';
+import { isNetworkError, RETRY_SECONDS } from '@/lib/loader';
+import { createOfflineStore } from '@/lib/offline';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { bankMeta, bankShortName, useTheme } from '@/lib/theme';
 import { dayLabel, money } from '@/lib/format';
@@ -107,12 +110,78 @@ export function Loading({ compact = false }: { compact?: boolean }) {
   );
 }
 
-export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
+// Hors connexion : un seul écran par page (voir src/lib/offline.ts), les autres blocs en échec s'effacent.
+const offlineStore = createOfflineStore();
+let nextOfflineId = 0;
+
+/** Coupure réseau : écran « Pas de connexion », nouvel essai toutes les 5 s, contenu de retour dès que ça passe. */
+function Offline({ onRetry }: { onRetry?: () => unknown }) {
+  const focused = useIsFocused();
+  const [id] = useState(() => ++nextOfflineId);
+  const retry = useRef(onRetry);
+  useLayoutEffect(() => { retry.current = onRetry; });
+  useEffect(() => {
+    offlineStore.register(id, () => retry.current?.(), false);
+    return () => offlineStore.unregister(id);
+  }, [id]);
+  useEffect(() => { offlineStore.setFocused(id, focused); }, [id, focused]);
+  const leader = useSyncExternalStore(offlineStore.subscribe, offlineStore.leader, offlineStore.leader);
+  return leader === id ? <OfflinePanel /> : null;
+}
+
+function OfflinePanel() {
   const t = useTheme();
+  const [left, setLeft] = useState(RETRY_SECONDS);
+  const [trying, setTrying] = useState(false);
+  const busy = useRef(false);
+  const remaining = useRef(RETRY_SECONDS);
+  const alive = useRef(true);
+
+  const run = useCallback(async () => {
+    if (busy.current) return; // jamais deux essais en même temps
+    busy.current = true;
+    setTrying(true);
+    try {
+      await offlineStore.retryAll();
+    } finally {
+      busy.current = false;
+      remaining.current = RETRY_SECONDS;
+      if (alive.current) { setTrying(false); setLeft(RETRY_SECONDS); }
+    }
+  }, []);
+
+  useEffect(() => {
+    alive.current = true;
+    const timer = setInterval(() => {
+      if (busy.current) return;
+      remaining.current -= 1;
+      if (remaining.current <= 0) run();
+      else setLeft(remaining.current);
+    }, 1000);
+    return () => { alive.current = false; clearInterval(timer); };
+  }, [run]);
+
+  return (
+    <View style={s.offline}>
+      <LogoLoader size={96} offline />
+      <Text style={{ color: t.text, fontSize: 16, fontWeight: '600', marginTop: 8 }}>Pas de connexion</Text>
+      <Text style={{ color: t.muted, fontSize: 13 }}>
+        {trying ? 'Nouvel essai…' : `Nouvel essai automatique dans ${left} s`}
+      </Text>
+      <Pressable onPress={run} disabled={trying} hitSlop={8} style={[s.retry, { borderColor: t.primary }]}>
+        <Text style={{ color: t.primary, fontWeight: '600' }}>Réessayer</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => unknown }) {
+  const t = useTheme();
+  if (isNetworkError(message)) return <Offline onRetry={onRetry} />;
   return (
     <View style={[s.error, { borderColor: t.danger }]}>
       <Text style={{ color: t.danger }}>{message}</Text>
-      {onRetry && <Text onPress={onRetry} style={{ color: t.primary, marginTop: 6, fontWeight: '600' }}>Réessayer</Text>}
+      {onRetry && <Text onPress={() => { onRetry(); }} style={{ color: t.primary, marginTop: 6, fontWeight: '600' }}>Réessayer</Text>}
     </View>
   );
 }
@@ -140,5 +209,7 @@ const s = StyleSheet.create({
   chip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   compact: { alignItems: 'center', paddingVertical: 32 },
+  offline: { alignItems: 'center', gap: 6, paddingVertical: 32, paddingHorizontal: 24 },
+  retry: { marginTop: 10, borderWidth: 1, borderRadius: 999, paddingHorizontal: 18, paddingVertical: 8 },
   error: { borderWidth: 1, borderRadius: 12, padding: 14, margin: 16 },
 });

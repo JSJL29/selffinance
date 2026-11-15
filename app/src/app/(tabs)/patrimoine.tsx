@@ -18,9 +18,9 @@ import { showAlert } from '@/lib/dialog';
 /** Onglet Patrimoine : total général, plus-value des placements, comptes par catégorie. */
 export default function Patrimoine() {
   const t = useTheme();
-  const bank = useLoad(fetchAccounts, []);
-  const manual = useLoad(fetchManualAccounts, []);
-  const quotedAt = useLoad(() => fetchQuotesUpdatedAt(), []);
+  const bank = useLoad(fetchAccounts, [], 'accounts');
+  const manual = useLoad(fetchManualAccounts, [], 'manualAccounts');
+  const quotedAt = useLoad(() => fetchQuotesUpdatedAt(), [], 'quotesAt');
   const [quoting, setQuoting] = useState(false);
 
   // Cours en direct à l'ouverture de l'onglet, puis recalcul des montants.
@@ -37,7 +37,7 @@ export default function Patrimoine() {
 
   // Historique (photo de 22 h) : comptes non masqués aujourd'hui, comme le total affiché.
   const [period, setPeriod] = useState<Period>('3M');
-  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period]);
+  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date()))), [period], `wealth:${period}`);
   const totalCurve = useMemo(() => totalSeries(history.data ?? [], {
     bank: new Set((bank.data ?? []).filter((a) => !a.hidden).map((a) => a.uid)),
     manual: new Set((manual.data ?? []).filter((m) => !m.hidden).map((m) => m.id)),

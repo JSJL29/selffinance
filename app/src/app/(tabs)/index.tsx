@@ -14,7 +14,7 @@ import { showAlert } from '@/lib/dialog';
 
 export default function Accounts() {
   const t = useTheme();
-  const { data, error, refreshing, refresh, reload } = useLoad(fetchAccounts, []);
+  const { data, error, refreshing, refresh, reload } = useLoad(fetchAccounts, [], 'accounts');
   const groups = useMemo(() => (data ? groupAccounts(data) : []), [data]);
 
   const total = groups.reduce((sum, g) => sum + (g.balanceEur ?? 0), 0);
@@ -61,7 +61,7 @@ export default function Accounts() {
 /** Synchro manuelle des banques, dans la limite du budget du jour (4 accès, automatiques compris). */
 function SyncButton({ onDone }: { onDone: () => Promise<void> }) {
   const t = useTheme();
-  const budget = useLoad(fetchSyncBudget, []);
+  const budget = useLoad(fetchSyncBudget, [], 'syncBudget');
   const [busy, setBusy] = useState(false);
   const left = budget.data?.manual_left ?? null;
   const disabled = busy || !left;

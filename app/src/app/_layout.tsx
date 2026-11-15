@@ -5,6 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/lib/theme';
+import { appCache } from '@/lib/data';
+import { StaleBanner } from '@/components/StaleBanner';
 
 export default function RootLayout() {
   const t = useTheme();
@@ -12,7 +14,10 @@ export default function RootLayout() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_OUT') appCache.clear(); // les copies des données ne survivent pas à la déconnexion
+      setSession(s);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -41,6 +46,7 @@ export default function RootLayout() {
           <Stack.Screen name="login" />
         </Stack.Protected>
       </Stack>
+      {session && <StaleBanner />}
       </View>
     </View>
   );

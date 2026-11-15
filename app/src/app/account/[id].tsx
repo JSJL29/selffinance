@@ -20,10 +20,10 @@ export default function AccountDetail() {
   const t = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const accounts = useLoad(fetchAccounts, []);
+  const accounts = useLoad(fetchAccounts, [], 'accounts');
   const group = useMemo(() => groupAccounts(accounts.data ?? []).find((g) => g.key === id), [accounts.data, id]);
   const uids = group?.members.map((m) => m.uid) ?? [];
-  const txs = useLoad(() => (uids.length ? fetchAccountTx(uids) : Promise.resolve([])), [uids.join(',')]);
+  const txs = useLoad(() => (uids.length ? fetchAccountTx(uids) : Promise.resolve([])), [uids.join(',')], `accountTx:${uids.join(',')}`);
   const sections = useMemo(() => byDay(txs.data ?? []), [txs.data]);
 
   // Historique (photo de 22 h) du groupe : somme de ses comptes (ex. Revolut EUR + USD).
@@ -32,6 +32,7 @@ export default function AccountDetail() {
   const history = useLoad(
     () => fetchWealthHistory(periodStart(period, isoDay(new Date())), { bankUids: uidKey ? uidKey.split(',') : [] }),
     [period, uidKey],
+    `wealth:${period}:${uidKey}`,
   );
   const curve = useMemo(() => {
     const mine = new Set(uidKey.split(','));

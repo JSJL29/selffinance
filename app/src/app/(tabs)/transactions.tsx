@@ -25,13 +25,13 @@ export default function Transactions() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [bank, setBank] = useState(ALL);
-  const { data, error, refreshing, refresh, reload } = useLoad(() => fetchMonthTx(month), [month.getTime()]);
+  const { data, error, refreshing, refresh, reload } = useLoad(() => fetchMonthTx(month), [month.getTime()], `tx:${month.getFullYear()}-${month.getMonth() + 1}`);
 
   const banks = useMemo(() => [...new Set((data ?? []).map((x) => x.bank))].sort((a, b) => a.localeCompare(b, 'fr')), [data]);
   const shown = useMemo(() => (data ?? []).filter((x) => bank === ALL || x.bank === bank), [data, bank]);
   // Virement SG → BNP : les deux opérations réunies en une ligne (totaux inchangés, les internes en sont exclus).
   // Les virements vers un compte manuel (Livret A, PEA…) n'ont pas de contrepartie bancaire : jamais appariés.
-  const manual = useLoad(fetchManualAccounts, []);
+  const manual = useLoad(fetchManualAccounts, [], 'manualAccounts');
   const manualNames = useMemo(() => new Set((manual.data ?? []).map((m) => m.name)), [manual.data]);
   const [hideInternal, setHideInternal] = useState(readHide);
   const toggleHide = () => setHideInternal((v) => { writeHide(!v); return !v; });

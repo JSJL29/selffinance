@@ -16,10 +16,10 @@ const PEA = ['pea', 'pea_pme'];
 /** Bilan fiscal estimé d'une année : plus-values réalisées, dividendes, impôt (CTO) ; PEA indicatif. */
 export default function Tax() {
   const t = useTheme();
-  const years = useLoad(fetchOperationYears, []);
+  const years = useLoad(fetchOperationYears, [], 'operationYears');
   const [year, setYear] = useState(new Date().getFullYear());
-  const summary = useLoad(() => fetchTaxSummary(year), [year]);
-  const accounts = useLoad(() => fetchRealizedByAccount(year), [year]);
+  const summary = useLoad(() => fetchTaxSummary(year), [year], `tax:${year}`);
+  const accounts = useLoad(() => fetchRealizedByAccount(year), [year], `taxAccounts:${year}`);
 
   const s = summary.data;
   const cto = (accounts.data ?? []).filter((a) => a.envelope === 'cto');

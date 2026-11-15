@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useIsFocused } from 'expo-router';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import { makeLogoLookup } from './logos';
 import { isoDay } from './format';
+import { createCache } from './cache';
+import { createStaleStore } from './stale';
+import { isNetworkError } from './loader';
 
 export type AccountRow = {
   uid: string;
@@ -298,38 +301,74 @@ export function byDay(txs: Tx[]) {
   return sections;
 }
 
-/** Charge des données, recharge à chaque retour sur l'écran et sur « tirer pour rafraîchir ». */
-export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
-  const [data, setData] = useState<T | null>(null);
+/** Dernières données des écrans de consultation, sur le téléphone (effacées à la déconnexion). */
+export const appCache = createCache(localStorage);
+/** Chargements qui montrent une copie faute de réseau (pastille « Hors connexion »). */
+export const staleStore = createStaleStore();
+let nextLoadId = 0;
+
+/**
+ * Charge des données, recharge à chaque retour sur l'écran et sur « tirer pour rafraîchir ».
+ * `key` (écrans de consultation) : la dernière copie s'affiche aussitôt, puis les données fraîches ; sans réseau,
+ * la copie reste affichée (pas d'erreur) et la pastille donne sa date. Une erreur serveur s'affiche toujours.
+ */
+export function useLoad<T>(fn: () => Promise<T>, deps: unknown[], key?: string) {
+  const [initial] = useState(() => (key ? appCache.read<T>(key) : null));
+  const [data, setData] = useState<T | null>(initial?.data ?? null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [id] = useState(() => ++nextLoadId);
   const fnRef = useRef(fn);
-  useLayoutEffect(() => { fnRef.current = fn; });
+  const keyRef = useRef(key);
+  useLayoutEffect(() => { fnRef.current = fn; keyRef.current = key; });
+  // Date des données affichées (copie ou dernier succès) ; null si rien n'est affiché.
+  const shownAt = useRef<string | null>(initial?.at ?? null);
 
   // Seule la dernière requête lancée compte : une réponse lente (ex. mois précédent) n'écrase pas la suivante.
   const lastRequest = useRef(0);
   const load = useCallback(async () => {
-    const id = ++lastRequest.current;
+    const req = ++lastRequest.current;
     try {
       const result = await fnRef.current();
-      if (id !== lastRequest.current) return;
+      if (req !== lastRequest.current) return;
       setData(result);
       setError(null);
+      shownAt.current = new Date().toISOString();
+      if (keyRef.current) appCache.write(keyRef.current, result);
+      staleStore.setStale(id, null);
     } catch (e) {
-      if (id !== lastRequest.current) return;
-      setError(e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e));
+      if (req !== lastRequest.current) return;
+      const message = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
+      if (shownAt.current && isNetworkError(message)) {
+        setError(null); // on garde ce qui est affiché ; la pastille dit de quand ça date
+        staleStore.setStale(id, shownAt.current);
+      } else {
+        setError(message);
+        staleStore.setStale(id, null);
+      }
     }
-  }, []);
+  }, [id]);
 
   // Le premier chargement vient de useFocusEffect ; ici seulement quand les paramètres changent.
   const mounted = useRef(false);
   useEffect(() => {
     if (!mounted.current) { mounted.current = true; return; }
-    setData(null);
+    const cached = keyRef.current ? appCache.read<T>(keyRef.current) : null;
+    setData(cached?.data ?? null);
+    shownAt.current = cached?.at ?? null;
+    staleStore.setStale(id, null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Pastille : seuls les chargements de la page affichée comptent.
+  const focused = useIsFocused();
+  useEffect(() => {
+    staleStore.register(id, load);
+    return () => staleStore.remove(id);
+  }, [id, load]);
+  useEffect(() => { staleStore.setFocused(id, focused); }, [id, focused, load]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);

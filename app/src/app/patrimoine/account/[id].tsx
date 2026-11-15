@@ -20,15 +20,15 @@ import { showAlert } from '@/lib/dialog';
 export default function ManualAccountDetail() {
   const t = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const account = useLoad(() => fetchManualAccount(id), [id]);
-  const positions = useLoad(() => fetchPositions(id), [id]);
-  const operations = useLoad(() => fetchOperations(id), [id]);
-  const quotedAt = useLoad(() => fetchQuotesUpdatedAt(id), [id]);
+  const account = useLoad(() => fetchManualAccount(id), [id], `manual:${id}`);
+  const positions = useLoad(() => fetchPositions(id), [id], `positions:${id}`);
+  const operations = useLoad(() => fetchOperations(id), [id], `operations:${id}`);
+  const quotedAt = useLoad(() => fetchQuotesUpdatedAt(id), [id], `quotesAt:${id}`);
   const [quoting, setQuoting] = useState(false);
 
   // Historique (photo de 22 h) : valeur, et montant investi en pointillés pour un placement.
   const [period, setPeriod] = useState<Period>('3M');
-  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date())), { manualId: id }), [period, id]);
+  const history = useLoad(() => fetchWealthHistory(periodStart(period, isoDay(new Date())), { manualId: id }), [period, id], `wealth:${period}:${id}`);
   const isInvestment = account.data?.kind === 'investment';
   const curves = useMemo<Series[]>(() => {
     const mine = (r: { manual_id: string | null }) => r.manual_id === id;
